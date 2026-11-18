@@ -1,49 +1,69 @@
 # MarketMate — conversational store
 
-A single-business conversational shopping experience for food, clothing and everyday health essentials. The first commit is a **UI/API prototype**, not a production-ready shop.
+A single-business conversational shopping experience for food, clothing and everyday health essentials. This repository contains the first backend milestone and the customer/admin interface.
 
-## Current prototype
+## Implemented
 
-- Full-screen chat-style shopping interface
-- Sample products across the three categories, priced in Ghana cedis
-- Basic keyword matching through the Worker API
-- Add-to-cart interaction in the browser
-- Admin dashboard layout preview
+- Full-screen chat-style shopping interface.
+- D1-backed catalogue with food, clothing and health essentials categories.
+- Public product/category listing and basic keyword product matching.
+- Admin account bootstrap protected by a Cloudflare Worker secret.
+- Password hashing with PBKDF2-HMAC-SHA-256 and random salts.
+- Opaque, random admin sessions stored as SHA-256 hashes in D1; HttpOnly, SameSite=Strict cookies.
+- Login throttling by hashed client IP.
+- Admin product create, edit and delete.
+- Category create and delete (categories with products cannot be deleted).
+- R2 product image uploads (JPG, PNG, WebP and AVIF; maximum 5 MB) with signature checks.
+- Sample catalogue rows in the initial D1 migration.
 
-The catalogue, cart and admin view currently use sample/demo data. There is no real checkout, database persistence, admin authentication, AI model connection, payment processing, or WhatsApp integration yet.
+## Cloudflare resources already created
 
-## Cloudflare project
+The resources were created in the connected Cloudflare account:
 
-This project uses Cloudflare's current `cf` CLI and `cloudflare.config.ts` project format (not Wrangler).
+- D1 database: `marketmate-store`
+- D1 database ID: `36d18154-3787-4b47-8a9b-81d085a172af`
+- R2 bucket: `marketmate-store-images`
+
+The initial schema and sample catalogue have already been applied to D1. The Worker is bound to these resources in `cloudflare.config.ts`.
+
+## First-time admin setup
+
+Before the Worker is deployed, create a secret named `ADMIN_SETUP_TOKEN` in the Worker settings:
+
+1. Open Cloudflare Dashboard → Workers & Pages.
+2. Select the `conversational-store` Worker after the first deployment.
+3. Open Settings → Variables and Secrets.
+4. Add a **Secret** named `ADMIN_SETUP_TOKEN` with a long, random value (at least 32 characters).
+5. Redeploy the Worker so the secret is available.
+
+Then open the storefront, select **Admin login**, choose **First time? Set up the admin account**, and enter that one-time setup token, your admin email and a password of at least 12 characters. The first admin account is created once; the setup endpoint will refuse subsequent setup attempts.
+
+Keep the setup token private. Do not commit it to GitHub or put it in a normal text variable.
+
+## Local development and deployment
+
+This project uses Cloudflare's `cf` CLI and `cloudflare.config.ts` project format.
 
 1. Install a current Node.js LTS release.
 2. Install dependencies: `npm install`.
 3. Install the Cloudflare CLI if needed: `npm install --global cf`.
 4. Sign in: `cf auth login`.
-5. Run locally: `npm run dev`.
-6. Build: `npm run build`.
-7. Deploy when the account resources and secrets have been configured: `npm run deploy`.
+5. Generate Worker binding types: `cf workers types`.
+6. Run locally: `npm run dev`.
+7. Build: `npm run build`.
+8. Deploy: `npm run deploy`.
 
-Connect this GitHub repository to Cloudflare Workers Builds for automatic deployments after the initial manual setup. Review the Cloudflare build settings against the current CLI documentation before enabling production deploys.
+Connect this GitHub repository to Cloudflare Workers Builds for automatic deployments from the default branch. Verify the build command and output settings in the Cloudflare dashboard before enabling automatic production deploys.
 
-## Planned production architecture
+## Important security and launch notes
 
-- **Workers + Static Assets:** storefront and API
-- **D1:** products, categories, customers, carts, orders and order events
-- **R2:** product image uploads
-- **Workers AI or a separately configured model provider:** conversational product discovery, with tool-based access to the real catalogue and cart
-- **Admin authentication:** protected admin routes and role checks
-- **Payments:** select a Ghana-supported provider and verify its current merchant requirements before integration
-- **WhatsApp:** Meta WhatsApp Cloud API later, sharing the same catalogue and order services
+- Admin API routes require a valid server-side session. Never expose admin credentials or setup tokens in frontend code.
+- Product prices are stored as integer pesewas to avoid floating-point money errors. The API returns Ghana cedi amounts for display; all future checkout totals must be recalculated server-side.
+- Product images are checked for allowed formats and file signatures, and are stored in a private R2 bucket served through the Worker.
+- This is not yet a production checkout: cart state is browser-only, orders and payment processing are not implemented, and the chat matching is keyword-based rather than AI-powered.
+- Medicine products must comply with applicable Ghana FDA and Pharmacy Council rules. The assistant must not diagnose, prescribe or recommend treatment. Prescription products require the correct verification and dispensing controls before sale.
+- Before public launch, add a privacy notice, delivery/refund policies, additional security review, automated tests, backups and monitoring.
 
-## Safety and launch requirements
+## Next milestone
 
-- Do not use the assistant to diagnose, prescribe, or replace a pharmacist. Medicine listings must follow applicable Ghana FDA and Pharmacy Council requirements; prescription-only products need the required verification and dispensing controls.
-- Keep API credentials in Cloudflare secrets, never in Git.
-- Validate all prices, stock, discounts and order totals on the server.
-- Do not accept payment details directly in chat.
-- Add rate limits, abuse protection, privacy notices, order cancellation/refund rules and delivery policies before launch.
-
-## Next implementation milestone
-
-Replace the demo catalogue with D1-backed product/category management, secure admin sign-in, image uploads to R2, and persistent carts/orders. Then connect the AI assistant to safe, server-side store tools.
+Implement persistent carts, checkout and orders; then connect a real AI model to safe, server-side catalogue/cart tools. WhatsApp will use the same backend later.
