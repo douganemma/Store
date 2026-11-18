@@ -97,7 +97,15 @@ function safeAdmin(admin: AdminRow) {
   return { id: admin.id, email: admin.email };
 }
 
+function originAllowed(request: Request): boolean {
+  const origin = request.headers.get("origin");
+  return !origin || origin === new URL(request.url).origin;
+}
+
 async function requireAdmin(request: Request, env: StoreEnv): Promise<AdminRow | Response> {
+  if (request.method !== "GET" && request.method !== "HEAD" && !originAllowed(request)) {
+    return json({ error: "Cross-origin request blocked." }, 403);
+  }
   const admin = await currentAdmin(request, env);
   return admin || json({ error: "Admin sign-in required." }, 401);
 }
@@ -149,6 +157,9 @@ async function createSession(admin: AdminRow, request: Request, env: StoreEnv): 
 }
 
 async function handleAuth(request: Request, env: StoreEnv, path: string): Promise<Response | null> {
+  if (request.method === "POST" && path.startsWith("/api/admin/") && !originAllowed(request)) {
+    return json({ error: "Cross-origin request blocked." }, 403);
+  }
   if (path === "/api/admin/status" && request.method === "GET") {
     const row = await env.DB.prepare("SELECT COUNT(*) AS count FROM admins").first<{ count: number }>();
     return json({ needsSetup: Number(row?.count || 0) === 0 });
