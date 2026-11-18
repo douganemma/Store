@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#10251d" />
+  <meta name="description" content="A conversational shop for food, clothing and everyday essentials." />
+  <title>MarketMate — Your shop, in a chat</title>
+  <style>
+    :root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#18231e;background:#f4f6f1;font-synthesis:none}
+    *{box-sizing:border-box}body{margin:0;min-height:100vh}.shell{max-width:1180px;margin:auto;min-height:100vh;display:grid;grid-template-columns:260px 1fr;background:#fff;box-shadow:0 20px 70px #14251b12}
+    aside{background:#10251d;color:#eaf2eb;padding:28px 20px;display:flex;flex-direction:column;gap:28px}.brand{display:flex;align-items:center;gap:11px;font-weight:800;font-size:20px;letter-spacing:-.5px}.brand-mark{width:38px;height:38px;border-radius:13px;background:#d8f36a;color:#183321;display:grid;place-items:center;font-size:20px}
+    .side-label{font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:#91a69a;margin:12px 0 2px}.nav{display:grid;gap:8px}.nav button{border:0;text-align:left;background:transparent;color:#c9d7cd;padding:12px;border-radius:10px;font:inherit;cursor:pointer}.nav button.active,.nav button:hover{background:#234236;color:#fff}.side-note{margin-top:auto;border:1px solid #355346;border-radius:14px;padding:14px;color:#b9c9be;font-size:12px;line-height:1.6}
+    main{min-width:0;display:flex;flex-direction:column;min-height:100vh}.topbar{height:76px;padding:0 30px;border-bottom:1px solid #edf0eb;display:flex;align-items:center;justify-content:space-between}.status{display:flex;align-items:center;gap:8px;color:#607067;font-size:13px}.dot{width:8px;height:8px;background:#70bd7c;border-radius:50%}.top-actions{display:flex;gap:10px}.pill{border:1px solid #e3e9e2;border-radius:999px;padding:9px 14px;background:white;color:#34443a;font-weight:600;font-size:12px;cursor:pointer}
+    .content{width:min(820px,100%);margin:0 auto;padding:34px 28px 24px;display:flex;flex-direction:column;flex:1}.eyebrow{font-size:11px;font-weight:800;letter-spacing:1.8px;text-transform:uppercase;color:#789078}.intro h1{font-size:clamp(28px,4vw,42px);line-height:1.08;letter-spacing:-1.7px;margin:12px 0 10px;color:#17251d}.intro p{margin:0;color:#718076;line-height:1.6}.chat{margin-top:28px;display:flex;flex-direction:column;gap:18px;flex:1}.bubble{max-width:78%;padding:15px 17px;border-radius:17px;line-height:1.55;font-size:14px}.bot{background:#f0f4ec;border-top-left-radius:5px;align-self:flex-start}.user{background:#183a2a;color:#fff;border-top-right-radius:5px;align-self:flex-end}.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;max-width:100%}.card{border:1px solid #e7ece5;border-radius:14px;overflow:hidden;background:white}.card-visual{height:96px;background:linear-gradient(135deg,#e9f2df,#dce9d4);display:grid;place-items:center;font-size:34px;overflow:hidden}.card-visual img{width:100%;height:100%;object-fit:cover}.card-body{padding:12px}.card h3{font-size:13px;margin:0 0 5px}.card p{font-size:11px;line-height:1.4;color:#758178;margin:0 0 10px}.price-row{display:flex;align-items:center;justify-content:space-between;font-size:13px;font-weight:800}.add{border:0;background:#d8f36a;border-radius:8px;padding:7px 9px;font-size:11px;font-weight:800;cursor:pointer;color:#20351f}.suggestions{display:flex;flex-wrap:wrap;gap:8px;margin-top:2px}.suggestions button{border:1px solid #dfe8dc;background:white;color:#49604f;border-radius:999px;padding:8px 12px;font-size:12px;cursor:pointer}
+    .composer{position:sticky;bottom:0;background:#fff;padding:15px 0 4px}.input-wrap{border:1px solid #dfe7dc;border-radius:16px;display:flex;align-items:center;padding:7px 8px 7px 16px;box-shadow:0 8px 28px #1b35210b}.input-wrap input{border:0;outline:0;flex:1;min-width:0;font:inherit;font-size:14px;padding:10px;background:transparent}.send{border:0;border-radius:11px;background:#d8f36a;color:#1e3422;font-weight:800;padding:12px 17px;cursor:pointer}.fineprint{text-align:center;font-size:10px;color:#9aa49b;margin:10px 0 0}
+    .admin-view{display:none;padding:30px;max-width:1100px;width:100%;margin:0 auto}.admin-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:22px}.admin-head h1{font-size:29px;letter-spacing:-1px;margin:6px 0}.admin-head p{margin:0;color:#7a877d;font-size:13px}.panel{border:1px solid #e7ece5;border-radius:15px;padding:18px;background:#fff;margin-bottom:16px}.panel h2{font-size:16px;margin:0 0 14px}.admin-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}.stat{border:1px solid #e8ede7;border-radius:14px;padding:16px}.stat small{color:#7d897f}.stat strong{display:block;font-size:24px;margin-top:7px}.admin-columns{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(220px,.8fr);gap:14px}.field-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px}.field{display:grid;gap:6px;margin-bottom:11px}.field label{font-size:11px;font-weight:700;color:#5d6c60}.field input,.field select,.field textarea{width:100%;border:1px solid #dfe7dc;border-radius:9px;padding:10px;font:inherit;font-size:13px;background:#fff;color:#233229}.field textarea{min-height:70px;resize:vertical}.check-row{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:#526258;margin:5px 0 14px}.check-row label{display:flex;gap:7px;align-items:center}.action{border:0;border-radius:9px;padding:10px 14px;background:#183a2a;color:#fff;font-weight:700;font-size:12px;cursor:pointer}.action.secondary{background:#eef3eb;color:#3c5142}.action.danger{background:#fff0ed;color:#a63e2d}.action:disabled{opacity:.5;cursor:wait}.auth-wrap{max-width:430px;margin:40px auto}.auth-wrap h2{font-size:20px;margin:0 0 8px}.muted{color:#7a877d;font-size:12px;line-height:1.5}.notice{font-size:12px;color:#a33e2c;margin-top:10px;min-height:18px}.product-table{width:100%;border-collapse:collapse;font-size:12px}.product-table th,.product-table td{text-align:left;border-bottom:1px solid #edf0eb;padding:11px 8px;vertical-align:middle}.product-table th{color:#7a877d;font-size:10px;text-transform:uppercase;letter-spacing:.7px}.product-name{font-weight:700}.table-actions{display:flex;gap:6px}.category-list{list-style:none;padding:0;margin:12px 0 0}.category-list li{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid #edf0eb;font-size:12px}.tag{background:#eff5e8;border-radius:99px;padding:5px 8px;font-size:10px}.hidden{display:none!important}
+    @media(max-width:760px){.shell{display:block}.shell aside{display:none}.topbar{height:62px;padding:0 17px}.content{padding:26px 17px 18px;min-height:calc(100vh - 62px)}.intro h1{font-size:32px}.bubble{max-width:92%}.cards{grid-template-columns:1fr}.card{display:grid;grid-template-columns:90px 1fr}.card-visual{height:100%;min-height:110px}.admin-view{padding:20px 15px}.admin-grid{grid-template-columns:1fr}.admin-columns{grid-template-columns:1fr}.field-grid{grid-template-columns:1fr}.top-actions .pill:first-child{display:none}.product-table th:nth-child(3),.product-table td:nth-child(3){display:none}.table-actions{flex-direction:column}}
+  </style>
+</head>
+<body>
+<div class="shell">
+  <aside>
+    <div class="brand"><span class="brand-mark">M</span> MarketMate</div>
+    <div><div class="side-label">Workspace</div><div class="nav"><button class="active" id="shopNav">✳ &nbsp; Shopping chat</button><button id="adminNav">▦ &nbsp; Admin dashboard</button></div></div>
+    <div><div class="side-label">Shop categories</div><div class="nav"><button class="category" data-category="food">🥘 &nbsp; Food & groceries</button><button class="category" data-category="clothing">👕 &nbsp; Clothing</button><button class="category" data-category="medicine">✚ &nbsp; Health essentials</button></div></div>
+    <div class="side-note">A simpler way to shop. Tell the assistant what you’re looking for and it will guide you.</div>
+  </aside>
+  <main>
+    <header class="topbar"><div class="status"><span class="dot"></span> Store assistant <span style="color:#a2aca4">· Online</span></div><div class="top-actions"><button class="pill" id="cartButton">Cart <span id="cartCount">0</span></button><button class="pill" id="adminTop">Admin login</button></div></header>
+    <section class="content" id="chatView">
+      <div class="intro"><div class="eyebrow">Welcome to MarketMate</div><h1>Your shop, in a chat.</h1><p>Tell me what you need. I’ll help you find food, clothing and everyday essentials.</p></div>
+      <div class="chat" id="messages">
+        <div class="bubble bot">Hi there! 👋 Welcome. What can I help you find today?</div>
+        <div class="suggestions"><button data-prompt="Show me food">🥘 Find food</button><button data-prompt="Show me clothing">👕 Shop clothing</button><button data-prompt="Show me health essentials">✚ Health essentials</button></div>
+      </div>
+      <form class="composer" id="chatForm"><div class="input-wrap"><input id="messageInput" autocomplete="off" placeholder="Ask for something… e.g. I need a blue shirt" /><button class="send" type="submit">Send ↗</button></div><p class="fineprint">Medicine questions should be confirmed with a licensed pharmacist.</p></form>
+    </section>
+    <section class="admin-view" id="adminView">
+      <div class="admin-head"><div><div class="eyebrow">Store management</div><h1>Admin dashboard</h1><p>Manage your products, categories and stock.</p></div><button class="action secondary hidden" id="adminSignOut">Sign out</button></div>
+      <div id="adminAuthPanel" class="auth-wrap">
+        <div class="panel">
+          <h2 id="authHeading">Admin sign in</h2>
+          <p class="muted" id="authHelp">Sign in to manage your store catalogue.</p>
+          <form id="loginForm">
+            <div class="field"><label for="loginEmail">Email</label><input id="loginEmail" type="email" required autocomplete="username" /></div>
+            <div class="field"><label for="loginPassword">Password</label><input id="loginPassword" type="password" required autocomplete="current-password" /></div>
+            <button class="action" type="submit">Sign in</button>
+          </form>
+          <form id="setupForm" class="hidden">
+            <div class="field"><label for="setupToken">One-time setup token</label><input id="setupToken" type="password" required autocomplete="off" /></div>
+            <div class="field"><label for="setupEmail">Admin email</label><input id="setupEmail" type="email" required autocomplete="username" /></div>
+            <div class="field"><label for="setupPassword">Create password (12+ characters)</label><input id="setupPassword" type="password" minlength="12" required autocomplete="new-password" /></div>
+            <button class="action" type="submit">Create admin account</button>
+          </form>
+          <p class="notice" id="authMessage"></p>
+          <button class="action secondary" type="button" id="showSetup">First time? Set up the admin account</button>
+          <p class="muted" style="margin-top:12px">Admin setup requires an ADMIN_SETUP_TOKEN secret configured in your Cloudflare Worker. Keep this token private.</p>
+        </div>
+      </div>
+      <div id="adminWorkspace" class="hidden">
+        <div class="admin-grid"><div class="stat"><small>Products in catalogue</small><strong id="statProducts">0</strong></div><div class="stat"><small>Active products</small><strong id="statActive">0</strong></div><div class="stat"><small>Low-stock products</small><strong id="statLowStock">0</strong></div></div>
+        <div class="admin-columns">
+          <section class="panel">
+            <h2 id="productFormTitle">Add a product</h2>
+            <form id="productForm">
+              <input id="productId" type="hidden" /><input id="productImageKey" type="hidden" />
+              <div class="field-grid">
+                <div class="field"><label for="productSku">SKU</label><input id="productSku" required maxlength="40" placeholder="e.g. FOOD-002" /></div>
+                <div class="field"><label for="productName">Product name</label><input id="productName" required maxlength="120" /></div>
+                <div class="field"><label for="productCategory">Category</label><select id="productCategory" required></select></div>
+                <div class="field"><label for="productPrice">Price (GH₵)</label><input id="productPrice" type="number" min="0" step="0.01" required /></div>
+                <div class="field"><label for="productStock">Stock quantity</label><input id="productStock" type="number" min="0" step="1" required value="0" /></div>
+                <div class="field"><label for="productImage">Product image (max 5 MB)</label><input id="productImage" type="file" accept="image/jpeg,image/png,image/webp,image/avif" /></div>
+              </div>
+              <div class="field"><label for="productDescription">Description</label><textarea id="productDescription" maxlength="2000"></textarea></div>
+              <div class="field"><label for="productAttributes">Options / variants (JSON)</label><textarea id="productAttributes" placeholder='{"sizes":["S","M","L"],"colours":["Black","White"]}'></textarea></div>
+              <div class="field-grid">
+                <div class="field"><label for="productBatch">Medicine batch number (if applicable)</label><input id="productBatch" maxlength="80" /></div>
+                <div class="field"><label for="productExpiry">Expiry date (if applicable)</label><input id="productExpiry" type="date" /></div>
+              </div>
+              <div class="check-row"><label><input id="productActive" type="checkbox" checked /> Active / visible to customers</label><label><input id="productPrescription" type="checkbox" /> Prescription required</label></div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="action" id="saveProduct" type="submit">Save product</button><button class="action secondary" type="button" id="resetProduct">Clear form</button></div>
+              <p class="notice" id="productMessage"></p>
+            </form>
+          </section>
+          <section class="panel">
+            <h2>Categories</h2>
+            <form id="categoryForm">
+              <div class="field"><label for="categoryName">New category name</label><input id="categoryName" required maxlength="80" placeholder="e.g. Shoes" /></div>
+              <div class="field"><label for="categoryDescription">Description</label><textarea id="categoryDescription" maxlength="500"></textarea></div>
+              <button class="action" type="submit">Add category</button><p class="notice" id="categoryMessage"></p>
+            </form>
+            <ul class="category-list" id="categoryList"></ul>
+          </section>
+        </div>
+        <section class="panel">
+          <h2>Product catalogue</h2>
+          <div id="productsTable"></div>
+        </section>
+      </div>
+    </section>
+  </main>
+</div>
+<script>
+const messages = document.querySelector("#messages");
+const form = document.querySelector("#chatForm");
+const input = document.querySelector("#messageInput");
+let cart = [];
+const money = n => "GH₵" + Number(n).toFixed(2);
+function bubble(text, who="bot"){const el=document.createElement("div");el.className="bubble "+who;el.textContent=text;messages.append(el);el.scrollIntoView({behavior:"smooth",block:"nearest"});}
+function productCards(products){
+  const wrap=document.createElement("div");wrap.className="cards";
+  products.forEach(p=>{
+    const card=document.createElement("article");card.className="card";
+    const visual=document.createElement("div");visual.className="card-visual";
+    if(p.imageUrl){const img=document.createElement("img");img.src=p.imageUrl;img.alt=p.name;visual.append(img);}else{visual.textContent=p.category==="food"?"🥘":p.category==="clothing"?"👕":"✚";}
+    const body=document.createElement("div");body.className="card-body";
+    const title=document.createElement("h3");title.textContent=p.name;
+    const desc=document.createElement("p");desc.textContent=p.description;
+    const row=document.createElement("div");row.className="price-row";
+    const price=document.createElement("span");price.textContent=money(p.price);
+    const add=document.createElement("button");add.className="add";add.textContent="Add +";add.disabled=!p.inStock;add.addEventListener("click",()=>{cart.push(p);document.querySelector("#cartCount").textContent=cart.length;bubble(p.name+" added to your cart.","user");bubble("Added! Your cart has "+cart.length+" item(s). Checkout will be enabled in the next build stage.");});
+    row.append(price,add);body.append(title,desc,row);card.append(visual,body);wrap.append(card);
+  });
+  messages.append(wrap);
+}
+async function sendMessage(text){if(!text.trim())return;bubble(text,"user");try{const r=await fetch("/api/chat",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({message:text})});const data=await r.json();bubble(data.reply||data.error||"Something went wrong.");if(data.products?.length)productCards(data.products);}catch{bubble("I can’t reach the store service right now. Please try again.");}}
+form.addEventListener("submit",e=>{e.preventDefault();const value=input.value;input.value="";sendMessage(value);});
+document.querySelectorAll("[data-prompt]").forEach(b=>b.addEventListener("click",()=>sendMessage(b.dataset.prompt)));
+document.querySelectorAll(".category").forEach(b=>b.addEventListener("click",()=>sendMessage("Show me "+b.dataset.category)));
+function showAdmin(on){document.querySelector("#chatView").style.display=on?"none":"flex";document.querySelector("#adminView").style.display=on?"block":"none";document.querySelector("#shopNav").classList.toggle("active",!on);document.querySelector("#adminNav").classList.toggle("active",on);if(on)loadAdmin();}
+document.querySelector("#adminNav").onclick=()=>showAdmin(true);document.querySelector("#adminTop").onclick=()=>showAdmin(true);document.querySelector("#shopNav").onclick=()=>showAdmin(false);
+document.querySelector("#cartButton").onclick=()=>bubble(cart.length?("Your cart has "+cart.length+" item(s): "+cart.map(p=>p.name).join(", ")+"."):"Your cart is empty.");
+
+async function api(path, options={}) {
+  const response = await fetch(path, { credentials:"same-origin", ...options });
+  const data = await response.json().catch(()=>({error:"Unexpected server response."}));
+  if(!response.ok) throw new Error(data.error || "Request failed.");
+  return data;
+}
+function showNotice(id,message){document.querySelector("#"+id).textContent=message||"";}
+function authMode(setup){
+  document.querySelector("#loginForm").classList.toggle("hidden",setup);
+  document.querySelector("#setupForm").classList.toggle("hidden",!setup);
+  document.querySelector("#showSetup").classList.toggle("hidden",setup);
+  document.querySelector("#authHeading").textContent=setup?"Create your admin account":"Admin sign in";
+  document.querySelector("#authHelp").textContent=setup?"This one-time setup creates the first store administrator.":"Sign in to manage your store catalogue.";
+  showNotice("authMessage","");
+}
+document.querySelector("#showSetup").onclick=()=>authMode(true);
+document.querySelector("#loginForm").addEventListener("submit",async e=>{
+  e.preventDefault();showNotice("authMessage","Signing in…");
+  try{await api("/api/admin/login",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({email:document.querySelector("#loginEmail").value,password:document.querySelector("#loginPassword").value})});await loadAdmin();}
+  catch(err){showNotice("authMessage",err.message);}
+});
+document.querySelector("#setupForm").addEventListener("submit",async e=>{
+  e.preventDefault();showNotice("authMessage","Creating administrator…");
+  try{await api("/api/admin/setup",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({setupToken:document.querySelector("#setupToken").value,email:document.querySelector("#setupEmail").value,password:document.querySelector("#setupPassword").value})});await loadAdmin();}
+  catch(err){showNotice("authMessage",err.message);}
+});
+document.querySelector("#adminSignOut").onclick=async()=>{try{await api("/api/admin/logout",{method:"POST"});}finally{document.querySelector("#adminWorkspace").classList.add("hidden");document.querySelector("#adminAuthPanel").classList.remove("hidden");document.querySelector("#adminSignOut").classList.add("hidden");}};
+let adminCategories=[];
+let adminProducts=[];
+async function loadAdmin(){
+  document.querySelector("#adminAuthPanel").classList.remove("hidden");
+  try{
+    await api("/api/admin/me");
+    document.querySelector("#adminAuthPanel").classList.add("hidden");
+    document.querySelector("#adminWorkspace").classList.remove("hidden");
+    document.querySelector("#adminSignOut").classList.remove("hidden");
+    await Promise.all([loadCategories(),loadProducts()]);
+  }catch{
+    document.querySelector("#adminWorkspace").classList.add("hidden");
+    document.querySelector("#adminSignOut").classList.add("hidden");
+    const status=await api("/api/admin/status").catch(()=>({needsSetup:false}));
+    document.querySelector("#showSetup").classList.toggle("hidden",!status.needsSetup);
+    authMode(false);
+  }
+}
+async function loadCategories(){
+  const data=await api("/api/admin/categories");adminCategories=data.categories||[];
+  const select=document.querySelector("#productCategory");select.replaceChildren();
+  adminCategories.filter(c=>Number(c.isActive)!==0).forEach(c=>{const o=document.createElement("option");o.value=c.slug;o.textContent=c.name;select.append(o);});
+  const list=document.querySelector("#categoryList");list.replaceChildren();
+  adminCategories.forEach(c=>{
+    const li=document.createElement("li");const label=document.createElement("span");label.textContent=c.name+(Number(c.isActive)===0?" (hidden)":"");
+    const del=document.createElement("button");del.className="action danger";del.textContent="Delete";del.onclick=async()=>{if(!confirm("Delete category "+c.name+"?"))return;try{await api("/api/admin/categories/"+encodeURIComponent(c.slug),{method:"DELETE"});await loadCategories();}catch(err){showNotice("categoryMessage",err.message);}};
+    li.append(label,del);list.append(li);
+  });
+}
+async function loadProducts(){
+  const data=await api("/api/admin/products");adminProducts=data.products||[];
+  document.querySelector("#statProducts").textContent=adminProducts.length;
+  document.querySelector("#statActive").textContent=adminProducts.filter(p=>p.isActive).length;
+  document.querySelector("#statLowStock").textContent=adminProducts.filter(p=>p.stockQuantity<5).length;
+  const wrap=document.querySelector("#productsTable");wrap.replaceChildren();
+  if(!adminProducts.length){wrap.textContent="No products yet. Add your first product above.";return;}
+  const table=document.createElement("table");table.className="product-table";
+  const thead=document.createElement("thead");thead.innerHTML="<tr><th>Product</th><th>Category</th><th>Price</th><th>Stock</th><th>Status</th><th>Actions</th></tr>";table.append(thead);
+  const tbody=document.createElement("tbody");
+  adminProducts.forEach(p=>{
+    const tr=document.createElement("tr");
+    const name=document.createElement("td");const strong=document.createElement("div");strong.className="product-name";strong.textContent=p.name;const sku=document.createElement("small");sku.textContent=p.sku;sku.style.color="#87938a";name.append(strong,sku);
+    const category=document.createElement("td");category.textContent=p.category;
+    const price=document.createElement("td");price.textContent=money(p.price);
+    const stock=document.createElement("td");stock.textContent=p.stockQuantity;
+    const status=document.createElement("td");const tag=document.createElement("span");tag.className="tag";tag.textContent=p.isActive?"Active":"Hidden";status.append(tag);
+    const actions=document.createElement("td");const buttons=document.createElement("div");buttons.className="table-actions";
+    const edit=document.createElement("button");edit.className="action secondary";edit.textContent="Edit";edit.onclick=()=>editProduct(p);
+    const remove=document.createElement("button");remove.className="action danger";remove.textContent="Delete";remove.onclick=async()=>{if(!confirm("Delete "+p.name+"?"))return;try{await api("/api/admin/products/"+encodeURIComponent(p.id),{method:"DELETE"});await loadProducts();}catch(err){showNotice("productMessage",err.message);}};
+    buttons.append(edit,remove);actions.append(buttons);tr.append(name,category,price,stock,status,actions);tbody.append(tr);
+  });
+  table.append(tbody);wrap.append(table);
+}
+function editProduct(p){
+  document.querySelector("#productFormTitle").textContent="Edit product";
+  document.querySelector("#productId").value=p.id;document.querySelector("#productImageKey").value=p.imageKey||"";
+  document.querySelector("#productSku").value=p.sku;document.querySelector("#productName").value=p.name;
+  document.querySelector("#productCategory").value=p.category;document.querySelector("#productPrice").value=p.price;
+  document.querySelector("#productStock").value=p.stockQuantity;document.querySelector("#productDescription").value=p.description;
+  document.querySelector("#productAttributes").value=JSON.stringify(p.attributes||{},null,2);
+  document.querySelector("#productBatch").value=p.batchNumber||"";document.querySelector("#productExpiry").value=p.expiryDate||"";
+  document.querySelector("#productActive").checked=p.isActive;document.querySelector("#productPrescription").checked=p.requiresPrescription;
+  document.querySelector("#productFormTitle").scrollIntoView({behavior:"smooth"});
+}
+document.querySelector("#resetProduct").onclick=()=>{document.querySelector("#productForm").reset();document.querySelector("#productId").value="";document.querySelector("#productImageKey").value="";document.querySelector("#productFormTitle").textContent="Add a product";showNotice("productMessage","");};
+document.querySelector("#productForm").addEventListener("submit",async e=>{
+  e.preventDefault();const button=document.querySelector("#saveProduct");button.disabled=true;showNotice("productMessage","Saving product…");
+  try{
+    let imageKey=document.querySelector("#productImageKey").value||null;
+    const file=document.querySelector("#productImage").files[0];
+    if(file){const fd=new FormData();fd.append("file",file);const upload=await api("/api/admin/uploads",{method:"POST",body:fd});imageKey=upload.imageKey;}
+    const body={
+      sku:document.querySelector("#productSku").value,name:document.querySelector("#productName").value,
+      category:document.querySelector("#productCategory").value,price:Number(document.querySelector("#productPrice").value),
+      stockQuantity:Number(document.querySelector("#productStock").value),description:document.querySelector("#productDescription").value,
+      attributes:JSON.parse(document.querySelector("#productAttributes").value||"{}"),
+      imageKey,isActive:document.querySelector("#productActive").checked,requiresPrescription:document.querySelector("#productPrescription").checked,
+      batchNumber:document.querySelector("#productBatch").value||null,expiryDate:document.querySelector("#productExpiry").value||null
+    };
+    const id=document.querySelector("#productId").value;
+    await api(id?"/api/admin/products/"+encodeURIComponent(id):"/api/admin/products",{method:id?"PUT":"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});
+    document.querySelector("#productForm").reset();document.querySelector("#productId").value="";document.querySelector("#productImageKey").value="";document.querySelector("#productFormTitle").textContent="Add a product";
+    showNotice("productMessage","Product saved.");await loadProducts();
+  }catch(err){showNotice("productMessage",err.message);}
+  finally{button.disabled=false;}
+});
+document.querySelector("#categoryForm").addEventListener("submit",async e=>{
+  e.preventDefault();showNotice("categoryMessage","Adding category…");
+  try{await api("/api/admin/categories",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({name:document.querySelector("#categoryName").value,description:document.querySelector("#categoryDescription").value})});document.querySelector("#categoryForm").reset();showNotice("categoryMessage","Category added.");await loadCategories();}
+  catch(err){showNotice("categoryMessage",err.message);}
+});
+</script>
+</body>
+</html>
