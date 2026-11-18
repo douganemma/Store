@@ -171,7 +171,7 @@ async function handleAuth(request: Request, env: StoreEnv, path: string): Promis
   }
 
   if (path === "/api/admin/setup" && request.method === "POST") {
-    if (!env.ADMIN_SETUP_TOKEN) return json({ error: "Admin setup is not configured. Add ADMIN_SETUP_TOKEN as a Worker secret first." }, 503);
+    if (!env.ADMIN_SETUP_TOKEN || env.ADMIN_SETUP_TOKEN.length < 32) return json({ error: "Admin setup requires an ADMIN_SETUP_TOKEN secret with at least 32 characters." }, 503);
     const count = await env.DB.prepare("SELECT COUNT(*) AS count FROM admins").first<{ count: number }>();
     if (Number(count?.count || 0) > 0) return json({ error: "Admin setup has already been completed." }, 409);
     let body: { setupToken?: string; email?: string; password?: string };
@@ -218,7 +218,8 @@ async function handleAuth(request: Request, env: StoreEnv, path: string): Promis
   if (path === "/api/admin/logout" && request.method === "POST") {
     const token = cookieValue(request, "mm_admin");
     if (token) await env.DB.prepare("DELETE FROM admin_sessions WHERE token_hash = ?").bind(await sha256(token)).run();
-    return json({ ok: true }, 200, { "set-cookie": "mm_admin=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0" });
+    const secure = new URL(request.url).protocol === "https:" ? "; Secure" : "";
+    return json({ ok: true }, 200, { "set-cookie": "mm_admin=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0" + secure });
   }
   return null;
 }
@@ -354,6 +355,8 @@ async function handleCategories(request: Request, env: StoreEnv, path: string): 
 
 async function handleUploads(request: Request, env: StoreEnv): Promise<Response> {
   const admin = await requireAdmin(request, env); if (isResponse(admin)) return admin;
+  const contentLength = Number(request.headers.get("content-length") || 0);
+  if (contentLength > MAX_IMAGE_BYTES + 64 * 1024) return json({ error: "Images must be smaller than 5 MB." }, 413);
   const form = await request.formData();
   const file = form.get("file");
   if (!(file instanceof File)) return json({ error: "Choose an image file." }, 400);
