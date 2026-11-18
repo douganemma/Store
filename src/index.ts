@@ -14,7 +14,8 @@ type ProductRow = {
 };
 
 const SESSION_SECONDS = 60 * 60 * 24 * 7;
-const PASSWORD_ITERATIONS = 310000;
+// Cloudflare Workers WebCrypto currently caps PBKDF2 iterations at 100,000.
+const PASSWORD_ITERATIONS = 100000;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_IMAGES: Record<string, string> = {
   "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/avif": "avif"
