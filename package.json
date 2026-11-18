@@ -1,0 +1,19 @@
+{
+  "name": "store",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "cf dev",
+    "build": "cf build",
+    "deploy": "cf deploy",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^2.0.0",
+    "@cloudflare/workers-types": "^4.20261118.0",
+    "cf": "^1.0.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.2.2"
+  }
+}
