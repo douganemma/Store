@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "cf dev",
-    "build": "cf build",
+    "build": "cf workers types && tsc --noEmit && cf build",
     "deploy": "cf deploy --force",
     "typecheck": "cf workers types && tsc --noEmit"
   },
