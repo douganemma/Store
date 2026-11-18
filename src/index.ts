@@ -2,6 +2,7 @@ type StoreEnv = {
   DB: D1Database;
   IMAGES: R2Bucket;
   ASSETS: Fetcher;
+  AI: Ai;
   ADMIN_SETUP_TOKEN?: string;
 };
 
@@ -529,21 +530,59 @@ async function handleAdminOrders(request: Request, env: StoreEnv, path: string):
 }
 
 async function handleChat(request: Request, env: StoreEnv): Promise<Response> {
-  let body: { message?: string };
+  let body: { message?: string; history?: Array<{ role?: string; content?: string }> };
   try { body = await request.json() as typeof body; } catch { return json({ error: "Please send a valid message." }, 400); }
   const message = String(body.message || "").trim();
   if (!message || message.length > 500) return json({ error: "Type a message of up to 500 characters." }, 400);
-  const lower = message.toLowerCase();
-  const category = lower.includes("cloth") || lower.includes("shirt") || lower.includes("dress") ? "clothing"
-    : lower.includes("food") || lower.includes("rice") || lower.includes("meal") || lower.includes("grocery") ? "food"
-    : lower.includes("medicine") || lower.includes("health") || lower.includes("pharmacy") ? "medicine" : "";
-  const products = await listProducts(env, { q: category ? "" : message, category });
-  const reply = category === "medicine"
-    ? "Here are health essentials in the catalogue. I can share product information, but I can’t diagnose, prescribe or recommend a medicine for symptoms. Please speak with a licensed pharmacist."
-    : products.length
-      ? "I found these items in the store catalogue. Would you like details or help choosing an option?"
-      : "I couldn’t find an exact match. Try a category such as food, clothing or health essentials.";
-  return json({ reply, products: products.slice(0, 6), demo: false });
+
+  // Product facts always come from D1; the model may only select real catalogue IDs.
+  const catalogue = await listProducts(env);
+  const available = catalogue.filter(product => product.inStock && !product.requiresPrescription);
+  const catalogueContext = available.slice(0, 60).map(product => ({
+    id: product.id, name: product.name, category: product.category,
+    description: product.description, priceGHS: product.price,
+    stockAvailable: product.stockQuantity
+  }));
+  const history = (Array.isArray(body.history) ? body.history : [])
+    .filter(item => (item.role === "user" || item.role === "assistant") && typeof item.content === "string")
+    .slice(-8)
+    .map(item => ({ role: item.role as "user" | "assistant", content: String(item.content).slice(0, 1200) }));
+
+  const systemPrompt = [
+    "You are the friendly AI shopping assistant for this Ghana-based online shop.",
+    "Help customers discover food, clothing and everyday health essentials; understand natural language and ask concise follow-up questions when needed.",
+    "Use only the supplied live catalogue for product names, prices, availability and claims. Never invent products, prices, discounts, stock or delivery promises.",
+    "Prices are in Ghana cedis (GHS). The store currently supports cash on delivery; customers pay the delivery agent when the order arrives.",
+    "You can help customers browse and choose, but do not claim to have added items to the cart or placed an order. Tell them to use the product card/cart checkout to do that.",
+    "For medicines or symptoms, do not diagnose, prescribe, recommend a treatment or suggest a dosage. You may provide neutral catalogue information for non-prescription health essentials and direct medicine/symptom questions to a licensed pharmacist. Prescription-only products are not available for online checkout.",
+    "Be warm, concise and clear. If no catalogue item fits, say so and ask what they are looking for.",
+    "Return ONLY valid JSON with exactly this shape: {\"reply\":\"customer-facing answer\",\"productIds\":[\"catalogue-id\"]}. Select at most 6 IDs from the supplied catalogue, and only when they are relevant to the customer's request. Use an empty array if no product cards are useful."
+  ].join("\n");
+  try {
+    const generated = await env.AI.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast", {
+      messages: [
+        { role: "system", content: systemPrompt + "\nLive catalogue: " + JSON.stringify(catalogueContext) },
+        ...history,
+        { role: "user", content: message }
+      ],
+      max_tokens: 550,
+      temperature: 0.25
+    }) as { response?: string };
+    const raw = String(generated.response || "").trim();
+    const cleaned = raw.replace(/^\x60{3}(?:json)?\s*/i, "").replace(/\s*\x60{3}$/, "");
+    let parsed: { reply?: string; productIds?: string[] } = {};
+    try { parsed = JSON.parse(cleaned) as typeof parsed; } catch { /* use a safe plain-text fallback below */ }
+    const reply = typeof parsed.reply === "string" && parsed.reply.trim()
+      ? parsed.reply.trim().slice(0, 1600)
+      : raw.slice(0, 1600) || "Sorry, I couldn’t prepare an answer just now. Please try again.";
+    const selectedIds = Array.isArray(parsed.productIds) ? parsed.productIds.slice(0, 6) : [];
+    const selected = new Set(selectedIds.filter(id => typeof id === "string"));
+    const products = available.filter(product => selected.has(product.id)).slice(0, 6);
+    return json({ reply, products, ai: true });
+  } catch (error) {
+    console.error(JSON.stringify({ message: "Workers AI chat request failed", error: error instanceof Error ? error.message : String(error) }));
+    return json({ error: "The AI shopping assistant is temporarily unavailable. Please try again shortly." }, 503);
+  }
 }
 
 export default {
