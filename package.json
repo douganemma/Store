@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "cf dev",
     "build": "cf build",
-    "deploy": "cf deploy",
+    "deploy": "cf deploy --force",
     "typecheck": "cf workers types && tsc --noEmit"
   },
   "devDependencies": {
