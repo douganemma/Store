@@ -98,6 +98,11 @@
           <h2>Product catalogue</h2>
           <div id="productsTable"></div>
         </section>
+        <section class="panel">
+          <h2>Customer orders</h2>
+          <p class="muted">Review cash-on-delivery orders and update their fulfilment status.</p>
+          <div id="ordersTable">Loading orders…</div>
+        </section>
       </div>
     </section>
   </main>
@@ -120,7 +125,7 @@ function productCards(products){
     const desc=document.createElement("p");desc.textContent=p.description;
     const row=document.createElement("div");row.className="price-row";
     const price=document.createElement("span");price.textContent=money(p.price);
-    const add=document.createElement("button");add.className="add";add.textContent="Add +";add.disabled=!p.inStock;add.addEventListener("click",()=>{cart.push(p);document.querySelector("#cartCount").textContent=cart.length;bubble(p.name+" added to your cart.","user");bubble("Added! Your cart has "+cart.length+" item(s). Checkout will be enabled in the next build stage.");});
+    const add=document.createElement("button");add.className="add";add.textContent="Add +";add.disabled=!p.inStock;add.addEventListener("click",async()=>{try{const data=await api("/api/cart/items",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({productId:p.id,quantity:1})});updateCartCount(data.itemCount);bubble(p.name+" added to your cart.","user");bubble("Added to your saved cart. You can open your cart whenever you are ready to check out.");}catch(err){bubble(err.message);}});
     row.append(price,add);body.append(title,desc,row);card.append(visual,body);wrap.append(card);
   });
   messages.append(wrap);
@@ -131,7 +136,31 @@ document.querySelectorAll("[data-prompt]").forEach(b=>b.addEventListener("click"
 document.querySelectorAll(".category").forEach(b=>b.addEventListener("click",()=>sendMessage("Show me "+b.dataset.category)));
 function showAdmin(on){document.querySelector("#chatView").style.display=on?"none":"flex";document.querySelector("#adminView").style.display=on?"block":"none";document.querySelector("#shopNav").classList.toggle("active",!on);document.querySelector("#adminNav").classList.toggle("active",on);if(on)loadAdmin();}
 document.querySelector("#adminNav").onclick=()=>showAdmin(true);document.querySelector("#adminTop").onclick=()=>showAdmin(true);document.querySelector("#shopNav").onclick=()=>showAdmin(false);
-document.querySelector("#cartButton").onclick=()=>bubble(cart.length?("Your cart has "+cart.length+" item(s): "+cart.map(p=>p.name).join(", ")+"."):"Your cart is empty.");
+function updateCartCount(count){document.querySelector("#cartCount").textContent=String(count||0);}
+async function showCart(){
+  try{
+    const data=await api("/api/cart");updateCartCount(data.itemCount);
+    const panel=document.createElement("div");panel.className="panel";panel.style.marginTop="10px";
+    const title=document.createElement("h2");title.textContent="Your cart";panel.append(title);
+    if(!data.items.length){const empty=document.createElement("p");empty.className="muted";empty.textContent="Your cart is empty. Add something from the catalogue to get started.";panel.append(empty);}
+    else{
+      data.items.forEach(item=>{const row=document.createElement("div");row.style.cssText="display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid #edf0eb;font-size:13px";
+        const label=document.createElement("span");label.textContent=item.product.name+" × "+item.quantity;
+        const right=document.createElement("span");right.style.whiteSpace="nowrap";right.textContent=money(item.lineTotalPesewas/100);
+        const remove=document.createElement("button");remove.className="action secondary";remove.textContent="Remove";remove.style.marginLeft="8px";remove.onclick=async()=>{await api("/api/cart/items/"+encodeURIComponent(item.product.id),{method:"DELETE"});panel.remove();showCart();};
+        const side=document.createElement("div");side.append(right,remove);row.append(label,side);panel.append(row);
+      });
+      const total=document.createElement("p");total.style.cssText="text-align:right;font-weight:800";total.textContent="Subtotal: "+money(data.subtotalPesewas/100);panel.append(total);
+      const note=document.createElement("p");note.className="muted";note.textContent="Payment method: Cash on delivery. Pay the delivery agent when your order arrives.";panel.append(note);
+      const checkout=document.createElement("form");checkout.style.marginTop="14px";checkout.innerHTML='<h3 style="font-size:15px">Delivery details</h3><div class="field"><label>Full name</label><input name="name" required minlength="2" maxlength="100" autocomplete="name"></div><div class="field"><label>Ghana phone number</label><input name="phone" required placeholder="0241234567 or +233241234567" autocomplete="tel"></div><div class="field"><label>Email (optional)</label><input name="email" type="email" autocomplete="email"></div><div class="field"><label>Delivery address</label><textarea name="address" required minlength="8" placeholder="House number, street, area and landmark" autocomplete="street-address"></textarea></div><div class="field"><label>Delivery notes (optional)</label><textarea name="notes" maxlength="500" placeholder="Directions or other instructions"></textarea></div><button class="action" type="submit">Place order · Pay on delivery</button><p class="notice" aria-live="polite"></p>';
+      checkout.addEventListener("submit",async e=>{e.preventDefault();const btn=checkout.querySelector("button");const notice=checkout.querySelector(".notice");btn.disabled=true;notice.textContent="Placing your order…";const fd=new FormData(checkout);const body=Object.fromEntries(fd.entries());try{const result=await api("/api/checkout",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});panel.remove();updateCartCount(0);bubble("Your order "+result.orderNumber+" has been received! Total: "+money(result.total)+". Payment: cash on delivery. "+result.message);}catch(err){notice.textContent=err.message;btn.disabled=false;}});
+      panel.append(checkout);
+    }
+    messages.append(panel);panel.scrollIntoView({behavior:"smooth",block:"nearest"});
+  }catch(err){bubble(err.message);}
+}
+document.querySelector("#cartButton").onclick=showCart;
+api("/api/cart").then(data=>updateCartCount(data.itemCount)).catch(()=>{});
 
 async function api(path, options={}) {
   const response = await fetch(path, { credentials:"same-origin", ...options });
@@ -169,7 +198,7 @@ async function loadAdmin(){
     document.querySelector("#adminAuthPanel").classList.add("hidden");
     document.querySelector("#adminWorkspace").classList.remove("hidden");
     document.querySelector("#adminSignOut").classList.remove("hidden");
-    await Promise.all([loadCategories(),loadProducts()]);
+    await Promise.all([loadCategories(),loadProducts(),loadOrders()]);
   }catch{
     document.querySelector("#adminWorkspace").classList.add("hidden");
     document.querySelector("#adminSignOut").classList.add("hidden");
@@ -212,6 +241,28 @@ async function loadProducts(){
     buttons.append(edit,remove);actions.append(buttons);tr.append(name,category,price,stock,status,actions);tbody.append(tr);
   });
   table.append(tbody);wrap.append(table);
+}
+async function loadOrders(){
+  const wrap=document.querySelector("#ordersTable");if(!wrap)return;
+  try{
+    const data=await api("/api/admin/orders");wrap.replaceChildren();
+    if(!data.orders.length){wrap.textContent="No orders yet.";return;}
+    const table=document.createElement("table");table.className="product-table";
+    const head=document.createElement("thead");head.innerHTML="<tr><th>Order</th><th>Customer</th><th>Total</th><th>Payment</th><th>Status</th><th>Update</th></tr>";table.append(head);
+    const body=document.createElement("tbody");
+    data.orders.forEach(order=>{
+      const tr=document.createElement("tr");
+      const orderCell=document.createElement("td");const strong=document.createElement("strong");strong.textContent=order.order_number;const small=document.createElement("small");small.style.display="block";small.style.color="#87938a";small.textContent=new Date(Number(order.created_at)*1000).toLocaleString();orderCell.append(strong,small);
+      const customer=document.createElement("td");customer.textContent=order.customer_name+" · "+order.phone;const total=document.createElement("td");total.textContent=money(Number(order.total_pesewas)/100);
+      const payment=document.createElement("td");payment.textContent="Pay on delivery";
+      const status=document.createElement("td");status.textContent=String(order.order_status).replaceAll("_"," ");
+      const update=document.createElement("td");const select=document.createElement("select");select.style.cssText="padding:7px;border:1px solid #dfe7dc;border-radius:8px;font-size:11px";
+      ["pending_confirmation","confirmed","processing","dispatched","delivered","cancelled"].forEach(s=>{const o=document.createElement("option");o.value=s;o.textContent=s.replaceAll("_"," ");o.selected=s===order.order_status;select.append(o);});
+      select.onchange=async()=>{try{await api("/api/admin/orders/"+encodeURIComponent(order.id),{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({status:select.value})});await loadOrders();}catch(err){alert(err.message);}};
+      update.append(select);tr.append(orderCell,customer,total,payment,status,update);body.append(tr);
+    });
+    table.append(body);wrap.append(table);
+  }catch(err){wrap.textContent=err.message;}
 }
 function editProduct(p){
   document.querySelector("#productFormTitle").textContent="Edit product";
