@@ -131,7 +131,31 @@ function productCards(products){
   messages.append(wrap);
 }
 const chatHistory=[];
-async function sendMessage(text){if(!text.trim())return;bubble(text,"user");try{const r=await fetch("/api/chat",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({message:text,history:chatHistory.slice(-8)})});const data=await r.json();const reply=data.reply||data.error||"Something went wrong.";bubble(reply);if(r.ok){chatHistory.push({role:"user",content:text},{role:"assistant",content:reply});if(chatHistory.length>8)chatHistory.splice(0,chatHistory.length-8);}if(data.products?.length)productCards(data.products);}catch{bubble("I can’t reach the store service right now. Please try again.");}}
+async function sendMessage(text){
+  const message=String(text||"").trim();if(!message)return;
+  bubble(message,"user");
+  if(/^(?:show|view|open|check)?\s*(?:my\s+)?(?:cart|basket)(?:\s+please)?[.!?]*$/i.test(message)||/^(?:checkout|check out|place my order|complete (?:my )?order|buy now)[.!?]*$/i.test(message)){
+    bubble(/checkout|check out|place my order|complete|buy now/i.test(message)?"Here is your cart. Review the items and complete the delivery details below to place your order.":"Here is your current cart. You can remove items or continue to checkout.");
+    await showCart();return;
+  }
+  try{
+    const r=await fetch("/api/chat",{method:"POST",headers:{"content-type":"application/json"},credentials:"same-origin",body:JSON.stringify({message,history:chatHistory.slice(-8)})});
+    const data=await r.json();const reply=data.reply||data.error||"Something went wrong.";bubble(reply);
+    if(r.ok){
+      chatHistory.push({role:"user",content:message},{role:"assistant",content:reply});
+      if(chatHistory.length>8)chatHistory.splice(0,chatHistory.length-8);
+      if(data.action?.type==="add_to_cart"){
+        try{
+          const cartData=await api("/api/cart/items",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({productId:data.action.productId,quantity:data.action.quantity||1})});
+          updateCartCount(cartData.itemCount);
+          const added=(data.products||[]).find(p=>p.id===data.action.productId);
+          bubble("Added "+(data.action.quantity||1)+" × "+(added?.name||"the selected item")+" to your cart. Your cart now has "+cartData.itemCount+" item(s).");
+        }catch(err){bubble("I couldn't add that item: "+err.message);}
+      }
+      if(data.products?.length)productCards(data.products);
+    }else if(data.error){bubble(data.error);}
+  }catch{bubble("I can’t reach the store service right now. Please try again.");}
+}
 form.addEventListener("submit",e=>{e.preventDefault();const value=input.value;input.value="";sendMessage(value);});
 document.querySelectorAll("[data-prompt]").forEach(b=>b.addEventListener("click",()=>sendMessage(b.dataset.prompt)));
 document.querySelectorAll(".category").forEach(b=>b.addEventListener("click",()=>sendMessage("Show me "+b.dataset.category)));
