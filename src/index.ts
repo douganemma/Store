@@ -3,7 +3,7 @@ type StoreEnv = {
   IMAGES: R2Bucket;
   ASSETS: Fetcher;
   AI: Ai;
-  ADMIN_SETUP_TOKEN?: string;
+  ADMIN_SETUP_TOKEN?: string;\n  WHATSAPP_VERIFY_TOKEN?: string;\n  WHATSAPP_APP_SECRET?: string;
 };
 
 type AdminRow = { id: string; email: string; password_hash: string };
@@ -687,6 +687,42 @@ async function handleBusinessTools(request: Request, env: StoreEnv, path: string
   return null;
 }
 
+
+async function handleWhatsAppWebhook(request: Request, env: StoreEnv, url: URL): Promise<Response> {
+  if (request.method === "GET") {
+    const mode = url.searchParams.get("hub.mode");
+    const token = url.searchParams.get("hub.verify_token");
+    const challenge = url.searchParams.get("hub.challenge");
+    if (mode === "subscribe" && token && env.WHATSAPP_VERIFY_TOKEN && token === env.WHATSAPP_VERIFY_TOKEN && challenge) {
+      return new Response(challenge, { status: 200, headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } });
+    }
+    return new Response("Webhook verification failed.", { status: 403 });
+  }
+  if (request.method === "POST") {
+    // Meta retries webhook deliveries unless it receives a fast 200 acknowledgement.
+    // Signature verification is enabled as soon as the Meta App Secret is configured.
+    const rawBody = await request.text();
+    if (env.WHATSAPP_APP_SECRET) {
+      const signature = request.headers.get("x-hub-signature-256") || "";
+      if (!signature.startsWith("sha256=")) return json({ error: "Invalid webhook signature." }, 401);
+      const key = await crypto.subtle.importKey("raw", encoder.encode(env.WHATSAPP_APP_SECRET), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+      const digest = new Uint8Array(await crypto.subtle.sign("HMAC", key, encoder.encode(rawBody)));
+      const expected = "sha256=" + Array.from(digest, b => b.toString(16).padStart(2, "0")).join("");
+      if (signature.length !== expected.length) return json({ error: "Invalid webhook signature." }, 401);
+      let mismatch = 0;
+      for (let i = 0; i < expected.length; i++) mismatch |= signature.charCodeAt(i) ^ expected.charCodeAt(i);
+      if (mismatch !== 0) return json({ error: "Invalid webhook signature." }, 401);
+    }
+    let event: unknown;
+    try { event = JSON.parse(rawBody); } catch { return json({ error: "Invalid JSON payload." }, 400); }
+    // Initial webhook receiver: acknowledge Meta events safely. Message processing and replies
+    // will be enabled once the WhatsApp access token and App Secret are configured.
+    console.log(JSON.stringify({ message: "WhatsApp webhook received", object: (event as {object?: string})?.object || "unknown" }));
+    return new Response("EVENT_RECEIVED", { status: 200, headers: { "content-type": "text/plain; charset=utf-8" } });
+  }
+  return json({ error: "Method not allowed." }, 405, { allow: "GET, POST" });
+}
+
 async function handleChat(request: Request, env: StoreEnv): Promise<Response> {
   let body: { message?: string; history?: Array<{ role?: string; content?: string }> };
   try { body = await request.json() as typeof body; } catch { return json({ error: "Please send a valid message." }, 400); }
@@ -776,7 +812,7 @@ export default {
   async fetch(request: Request, env: StoreEnv): Promise<Response> {
     const url = new URL(request.url);
     try {
-      if (url.pathname === "/api/health") return json({ ok: true, app: "marketmate", stage: "cash-on-delivery" });
+      if (url.pathname === "/api/health") return json({ ok: true, app: "marketmate", stage: "cash-on-delivery" });\n      if (url.pathname === "/api/whatsapp/webhook") return handleWhatsAppWebhook(request, env, url);
       const auth = await handleAuth(request, env, url.pathname);
       if (auth) return auth;
       const media = await handleMedia(request, env, url.pathname);
