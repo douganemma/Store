@@ -103,6 +103,50 @@
           <p class="muted">Review cash-on-delivery orders and update their fulfilment status.</p>
           <div id="ordersTable">Loading orders…</div>
         </section>
+        <section class="panel">
+          <h2>Business profile & automated messages</h2>
+          <p class="muted">These details appear in the customer chat. Turn on away mode when the shop is unavailable.</p>
+          <form id="storeSettingsForm">
+            <div class="field-grid">
+              <div class="field"><label for="storeBusinessName">Business name</label><input id="storeBusinessName" required maxlength="100"></div>
+              <div class="field"><label for="storeTagline">Tagline</label><input id="storeTagline" maxlength="140"></div>
+              <div class="field"><label for="storePhone">Business phone</label><input id="storePhone" maxlength="30"></div>
+              <div class="field"><label for="storeEmail">Business email</label><input id="storeEmail" type="email" maxlength="160"></div>
+            </div>
+            <div class="field"><label for="storeDescription">Business description</label><textarea id="storeDescription" maxlength="500"></textarea></div>
+            <div class="field"><label for="storeAddress">Business address</label><input id="storeAddress" maxlength="300"></div>
+            <div class="field"><label for="storeHours">Opening hours</label><input id="storeHours" maxlength="500" placeholder="e.g. Mon–Sat, 8:00am–6:00pm"></div>
+            <div class="field"><label for="storeGreeting">Greeting message</label><textarea id="storeGreeting" maxlength="600" required></textarea></div>
+            <div class="field"><label for="storeAway">Away message</label><textarea id="storeAway" maxlength="600" required></textarea></div>
+            <div class="check-row"><label><input id="storeAwayEnabled" type="checkbox"> Enable away mode now</label></div>
+            <button class="action" type="submit">Save business profile</button><p class="notice" id="storeSettingsMessage"></p>
+          </form>
+        </section>
+        <div class="admin-columns">
+          <section class="panel">
+            <h2>Saved quick replies</h2>
+            <p class="muted">Create approved answers for common questions. The AI assistant can use these when replying.</p>
+            <form id="quickReplyForm">
+              <div class="field"><label for="quickShortcut">Shortcut (e.g. delivery)</label><input id="quickShortcut" required maxlength="30" placeholder="delivery"></div>
+              <div class="field"><label for="quickTitle">Title</label><input id="quickTitle" required maxlength="80" placeholder="Delivery information"></div>
+              <div class="field"><label for="quickMessage">Saved reply</label><textarea id="quickMessage" required maxlength="800" placeholder="We deliver within..."></textarea></div>
+              <button class="action" type="submit">Add quick reply</button><p class="notice" id="quickReplyMessage"></p>
+            </form>
+            <ul class="category-list" id="quickReplyList"></ul>
+          </section>
+          <section class="panel">
+            <h2>Catalogue collections</h2>
+            <p class="muted">Group selected products into collections customers can browse in the chat.</p>
+            <form id="collectionForm">
+              <input id="collectionId" type="hidden">
+              <div class="field"><label for="collectionName">Collection name</label><input id="collectionName" required maxlength="80" placeholder="Popular this week"></div>
+              <div class="field"><label for="collectionDescription">Description</label><textarea id="collectionDescription" maxlength="500"></textarea></div>
+              <div class="field"><label for="collectionProducts">Products (select one or more)</label><select id="collectionProducts" multiple size="7" style="min-height:150px"></select></div>
+              <button class="action" type="submit" id="saveCollection">Save collection</button><button class="action secondary" type="button" id="resetCollection">Clear</button><p class="notice" id="collectionMessage"></p>
+            </form>
+            <ul class="category-list" id="collectionList"></ul>
+          </section>
+        </div>
       </div>
     </section>
   </main>
@@ -186,7 +230,7 @@ async function showCart(){
   }catch(err){bubble(err.message);}
 }
 document.querySelector("#cartButton").onclick=showCart;
-api("/api/cart").then(data=>updateCartCount(data.itemCount)).catch(()=>{});
+api("/api/cart").then(data=>updateCartCount(data.itemCount)).catch(()=>{});\nloadPublicStorefront();
 
 async function api(path, options={}) {
   const response = await fetch(path, { credentials:"same-origin", ...options });
@@ -224,7 +268,7 @@ async function loadAdmin(){
     document.querySelector("#adminAuthPanel").classList.add("hidden");
     document.querySelector("#adminWorkspace").classList.remove("hidden");
     document.querySelector("#adminSignOut").classList.remove("hidden");
-    await Promise.all([loadCategories(),loadProducts(),loadOrders()]);
+    await Promise.all([loadCategories(),loadProducts(),loadOrders(),loadStoreSettings(),loadQuickReplies(),loadCollections()]);
   }catch{
     document.querySelector("#adminWorkspace").classList.add("hidden");
     document.querySelector("#adminSignOut").classList.add("hidden");
@@ -289,6 +333,85 @@ async function loadOrders(){
     });
     table.append(body);wrap.append(table);
   }catch(err){wrap.textContent=err.message;}
+}
+
+async function loadStoreSettings(){
+  try{
+    const data=await api("/api/admin/store-settings");const s=data.settings||{};
+    document.querySelector("#storeBusinessName").value=s.businessName||"";
+    document.querySelector("#storeTagline").value=s.tagline||"";
+    document.querySelector("#storePhone").value=s.phone||"";
+    document.querySelector("#storeEmail").value=s.email||"";
+    document.querySelector("#storeDescription").value=s.description||"";
+    document.querySelector("#storeAddress").value=s.address||"";
+    document.querySelector("#storeHours").value=s.openingHours||"";
+    document.querySelector("#storeGreeting").value=s.greetingMessage||"";
+    document.querySelector("#storeAway").value=s.awayMessage||"";
+    document.querySelector("#storeAwayEnabled").checked=Boolean(s.awayEnabled);
+  }catch(err){showNotice("storeSettingsMessage",err.message);}
+}
+document.querySelector("#storeSettingsForm").addEventListener("submit",async e=>{
+  e.preventDefault();showNotice("storeSettingsMessage","Saving…");
+  const body={businessName:document.querySelector("#storeBusinessName").value,tagline:document.querySelector("#storeTagline").value,phone:document.querySelector("#storePhone").value,email:document.querySelector("#storeEmail").value,description:document.querySelector("#storeDescription").value,address:document.querySelector("#storeAddress").value,openingHours:document.querySelector("#storeHours").value,greetingMessage:document.querySelector("#storeGreeting").value,awayMessage:document.querySelector("#storeAway").value,awayEnabled:document.querySelector("#storeAwayEnabled").checked};
+  try{await api("/api/admin/store-settings",{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify(body)});showNotice("storeSettingsMessage","Business profile saved. Refresh the customer chat to see the changes.");}
+  catch(err){showNotice("storeSettingsMessage",err.message);}
+});
+async function loadQuickReplies(){
+  try{
+    const data=await api("/api/admin/quick-replies");const list=document.querySelector("#quickReplyList");list.replaceChildren();
+    (data.quickReplies||[]).forEach(item=>{
+      const li=document.createElement("li");const label=document.createElement("span");label.textContent="/"+item.shortcut+" — "+item.title+(Number(item.isActive)===0?" (inactive)":"");
+      const del=document.createElement("button");del.className="action danger";del.textContent="Delete";del.onclick=async()=>{try{await api("/api/admin/quick-replies/"+encodeURIComponent(item.id),{method:"DELETE"});await loadQuickReplies();}catch(err){showNotice("quickReplyMessage",err.message);}};
+      li.append(label,del);list.append(li);
+    });
+  }catch(err){showNotice("quickReplyMessage",err.message);}
+}
+document.querySelector("#quickReplyForm").addEventListener("submit",async e=>{
+  e.preventDefault();showNotice("quickReplyMessage","Saving…");
+  const body={shortcut:document.querySelector("#quickShortcut").value,title:document.querySelector("#quickTitle").value,message:document.querySelector("#quickMessage").value};
+  try{await api("/api/admin/quick-replies",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});document.querySelector("#quickReplyForm").reset();showNotice("quickReplyMessage","Quick reply added.");await loadQuickReplies();}
+  catch(err){showNotice("quickReplyMessage",err.message);}
+});
+async function loadCollections(){
+  try{
+    const [data,products]=await Promise.all([api("/api/admin/collections"),api("/api/admin/products")]);
+    const select=document.querySelector("#collectionProducts");select.replaceChildren();
+    (products.products||[]).forEach(p=>{const option=document.createElement("option");option.value=p.id;option.textContent=p.name+" · "+money(p.price);select.append(option);});
+    const list=document.querySelector("#collectionList");list.replaceChildren();
+    (data.collections||[]).forEach(item=>{
+      const li=document.createElement("li");const label=document.createElement("span");label.textContent=item.name+" ("+(item.productIds||[]).length+" products)";
+      const actions=document.createElement("div");actions.style.display="flex";actions.style.gap="6px";
+      const edit=document.createElement("button");edit.className="action secondary";edit.textContent="Edit";edit.onclick=()=>{document.querySelector("#collectionId").value=item.id;document.querySelector("#collectionName").value=item.name;document.querySelector("#collectionDescription").value=item.description||"";Array.from(select.options).forEach(o=>o.selected=(item.productIds||[]).includes(o.value));document.querySelector("#saveCollection").textContent="Update collection";};
+      const del=document.createElement("button");del.className="action danger";del.textContent="Delete";del.onclick=async()=>{if(!confirm("Delete collection "+item.name+"?"))return;try{await api("/api/admin/collections/"+encodeURIComponent(item.id),{method:"DELETE"});await loadCollections();}catch(err){showNotice("collectionMessage",err.message);}};
+      actions.append(edit,del);li.append(label,actions);list.append(li);
+    });
+  }catch(err){showNotice("collectionMessage",err.message);}
+}
+document.querySelector("#resetCollection").onclick=()=>{document.querySelector("#collectionForm").reset();document.querySelector("#collectionId").value="";document.querySelector("#saveCollection").textContent="Save collection";};
+document.querySelector("#collectionForm").addEventListener("submit",async e=>{
+  e.preventDefault();showNotice("collectionMessage","Saving…");
+  const id=document.querySelector("#collectionId").value;
+  const body={name:document.querySelector("#collectionName").value,description:document.querySelector("#collectionDescription").value,productIds:Array.from(document.querySelector("#collectionProducts").selectedOptions).map(o=>o.value)};
+  try{await api(id?"/api/admin/collections/"+encodeURIComponent(id):"/api/admin/collections",{method:id?"PUT":"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});document.querySelector("#resetCollection").click();showNotice("collectionMessage","Collection saved.");await loadCollections();}
+  catch(err){showNotice("collectionMessage",err.message);}
+});
+async function loadPublicStorefront(){
+  try{
+    const data=await api("/api/storefront");const s=data.settings;if(!s)return;
+    document.title=(s.businessName||"MarketMate")+" — "+(s.tagline||"Shop in a chat");
+    const eyebrow=document.querySelector(".intro .eyebrow");if(eyebrow)eyebrow.textContent=s.businessName||"Welcome";
+    const heading=document.querySelector(".intro h1");if(heading)heading.textContent=s.tagline||"Your shop, in a chat.";
+    const description=document.querySelector(".intro p");if(description)description.textContent=s.description||"Tell me what you need. I’ll help you find food, clothing and everyday essentials.";
+    const greeting=document.querySelector("#messages .bubble.bot");if(greeting)greeting.textContent=s.awayEnabled?(s.awayMessage||"We are currently away."): (s.greetingMessage||"Hi there! What can I help you find today?");
+    const side=document.querySelector(".side-note");if(side){const details=[s.address,s.phone,s.openingHours].filter(Boolean).join(" · ");side.textContent=details||"A simpler way to shop. Tell the assistant what you’re looking for and it will guide you.";}
+    if(s.awayEnabled){const status=document.querySelector(".status");if(status)status.innerHTML='<span class="dot" style="background:#e4a94c"></span> Store assistant <span style="color:#a2aca4">· Away</span>';}
+  }catch{/* retain the default storefront if settings cannot be loaded */}
+  try{
+    const data=await api("/api/collections");if(!data.collections?.length)return;
+    const wrap=document.createElement("div");wrap.className="suggestions";
+    data.collections.forEach(collection=>{const button=document.createElement("button");button.textContent="🗂️ "+collection.name;button.addEventListener("click",()=>{bubble("Show me "+collection.name,"user");if(collection.description)bubble(collection.description);if(collection.products?.length)productCards(collection.products);else bubble("There are no available products in this collection yet.");});wrap.append(button);});
+    const firstSuggestions=document.querySelector("#messages .suggestions");if(firstSuggestions)firstSuggestions.after(wrap);else messages.prepend(wrap);
+  }catch{/* collections are optional */}
 }
 function editProduct(p){
   document.querySelector("#productFormTitle").textContent="Edit product";
