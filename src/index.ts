@@ -567,11 +567,19 @@ async function handleChat(request: Request, env: StoreEnv): Promise<Response> {
       ],
       max_tokens: 550,
       temperature: 0.25
-    }) as { response?: string };
-    const raw = String(generated.response || "").trim();
+    }) as { response?: unknown; choices?: Array<{ message?: { content?: unknown } }> };
+    const responseValue = generated.response;
+    const raw = (typeof responseValue === "string" ? responseValue
+      : responseValue && typeof responseValue === "object" ? JSON.stringify(responseValue)
+      : typeof generated.choices?.[0]?.message?.content === "string" ? generated.choices[0].message.content
+      : "").trim();
     const cleaned = raw.replace(/^\x60{3}(?:json)?\s*/i, "").replace(/\s*\x60{3}$/, "");
     let parsed: { reply?: string; productIds?: string[] } = {};
-    try { parsed = JSON.parse(cleaned) as typeof parsed; } catch { /* use a safe plain-text fallback below */ }
+    if (responseValue && typeof responseValue === "object" && !Array.isArray(responseValue)) {
+      parsed = responseValue as { reply?: string; productIds?: string[] };
+    } else {
+      try { parsed = JSON.parse(cleaned) as typeof parsed; } catch { /* use a safe plain-text fallback below */ }
+    }
     const reply = typeof parsed.reply === "string" && parsed.reply.trim()
       ? parsed.reply.trim().slice(0, 1600)
       : raw.slice(0, 1600) || "Sorry, I couldn’t prepare an answer just now. Please try again.";
