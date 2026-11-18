@@ -10,7 +10,8 @@ export default defineConfig({
     env: {
       DB: bindings.d1({ name: "marketmate-store", id: "36d18154-3787-4b47-8a9b-81d085a172af" }),
       ASSETS: bindings.assets(),
-      IMAGES: bindings.r2({ name: "marketmate-store-images" })
+      IMAGES: bindings.r2({ name: "marketmate-store-images" }),
+      AI: bindings.ai()
     },
     observability: {
       enabled: true,
