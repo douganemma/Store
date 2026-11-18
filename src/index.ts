@@ -783,7 +783,8 @@ export default {
       if (media) return media;
       if (url.pathname === "/api/admin/uploads" && request.method === "POST") return handleUploads(request, env);
       const businessTools = await handleBusinessTools(request, env, url.pathname);
-      if (businessTools) return businessTools;\n      const categories = await handleCategories(request, env, url.pathname);
+      if (businessTools) return businessTools;
+      const categories = await handleCategories(request, env, url.pathname);
       if (categories) return categories;
       const adminOrders = await handleAdminOrders(request, env, url.pathname);
       if (adminOrders) return adminOrders;
