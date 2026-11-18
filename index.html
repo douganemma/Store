@@ -114,6 +114,7 @@ const input = document.querySelector("#messageInput");
 let cart = [];
 const money = n => "GH₵" + Number(n).toFixed(2);
 function bubble(text, who="bot"){const el=document.createElement("div");el.className="bubble "+who;el.textContent=text;messages.append(el);el.scrollIntoView({behavior:"smooth",block:"nearest"});}
+function cartQuickReplies(){const wrap=document.createElement("div");wrap.className="suggestions";[["🛒 View cart","show my cart"],["💳 Checkout","checkout"],["🛍️ Keep shopping","Show me popular products"]].forEach(([label,prompt])=>{const button=document.createElement("button");button.type="button";button.textContent=label;button.addEventListener("click",()=>sendMessage(prompt));wrap.append(button);});messages.append(wrap);wrap.scrollIntoView({behavior:"smooth",block:"nearest"});}
 function productCards(products){
   const wrap=document.createElement("div");wrap.className="cards";
   products.forEach(p=>{
@@ -125,7 +126,7 @@ function productCards(products){
     const desc=document.createElement("p");desc.textContent=p.description;
     const row=document.createElement("div");row.className="price-row";
     const price=document.createElement("span");price.textContent=money(p.price);
-    const add=document.createElement("button");add.className="add";add.textContent="Add +";add.disabled=!p.inStock;add.addEventListener("click",async()=>{try{const data=await api("/api/cart/items",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({productId:p.id,quantity:1})});updateCartCount(data.itemCount);bubble(p.name+" added to your cart.","user");bubble("Added to your saved cart. You can open your cart whenever you are ready to check out.");}catch(err){bubble(err.message);}});
+    const add=document.createElement("button");add.className="add";add.textContent="Add +";add.disabled=!p.inStock;add.addEventListener("click",async()=>{try{const data=await api("/api/cart/items",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({productId:p.id,quantity:1})});updateCartCount(data.itemCount);bubble(p.name+" added to your cart.","user");bubble("Added to your cart. What would you like to do next?");cartQuickReplies();}catch(err){bubble(err.message);}});
     row.append(price,add);body.append(title,desc,row);card.append(visual,body);wrap.append(card);
   });
   messages.append(wrap);
@@ -149,7 +150,7 @@ async function sendMessage(text){
           const cartData=await api("/api/cart/items",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({productId:data.action.productId,quantity:data.action.quantity||1})});
           updateCartCount(cartData.itemCount);
           const added=(data.products||[]).find(p=>p.id===data.action.productId);
-          bubble("Added "+(data.action.quantity||1)+" × "+(added?.name||"the selected item")+" to your cart. Your cart now has "+cartData.itemCount+" item(s).");
+          bubble("Added "+(data.action.quantity||1)+" × "+(added?.name||"the selected item")+" to your cart. Your cart now has "+cartData.itemCount+" item(s). What would you like to do next?");cartQuickReplies();
         }catch(err){bubble("I couldn't add that item: "+err.message);}
       }
       if(data.products?.length)productCards(data.products);
