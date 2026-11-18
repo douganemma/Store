@@ -15,6 +15,9 @@ A single-business conversational shopping experience for food, clothing and ever
 - Category create and delete (categories with products cannot be deleted).
 - R2 product image uploads (JPG, PNG, WebP and AVIF; maximum 5 MB) with signature checks.
 - Sample catalogue rows in the initial D1 migration.
+- Persistent customer carts stored in D1 and associated with a secure, HTTP-only guest cart cookie.
+- Cash-on-delivery checkout with Ghana phone validation, server-side price calculation, stock checks and stock deduction.
+- Order records and item snapshots in D1, with an admin order list and fulfilment status updates.
 
 ## Live deployment
 
@@ -67,10 +70,12 @@ Connect this GitHub repository to Cloudflare Workers Builds for automatic deploy
 - Admin API routes require a valid server-side session. Never expose admin credentials or setup tokens in frontend code.
 - Product prices are stored as integer pesewas to avoid floating-point money errors. The API returns Ghana cedi amounts for display; all future checkout totals must be recalculated server-side.
 - Product images are checked for allowed formats and file signatures, and are stored in a private R2 bucket served through the Worker.
-- This is not yet a production checkout: cart state is browser-only, orders and payment processing are not implemented, and the chat matching is keyword-based rather than AI-powered.
+- Cash-on-delivery ordering is implemented, but delivery fees are currently zero and must be configured before launch. Confirm every COD order with the customer and verify the delivery address.
+- Online payments (Paystack/Hubtel), order tracking for customers, customer accounts, WhatsApp and the real AI shopping assistant are not implemented yet. The chat matching is still keyword-based.
+- Prescription-required products are blocked from online cart checkout until appropriate verification and dispensing controls are implemented.
 - Medicine products must comply with applicable Ghana FDA and Pharmacy Council rules. The assistant must not diagnose, prescribe or recommend treatment. Prescription products require the correct verification and dispensing controls before sale.
 - Before public launch, add a privacy notice, delivery/refund policies, additional security review, automated tests, backups and monitoring.
 
 ## Next milestone
 
-Implement persistent carts, checkout and orders; then connect a real AI model to safe, server-side catalogue/cart tools. WhatsApp will use the same backend later.
+Next: connect Workers AI to safe catalogue and cart tools, then add customer order tracking and configurable delivery fees. Integrate Paystack/Hubtel after the cash-on-delivery flow has been tested. WhatsApp will use the same backend later.
