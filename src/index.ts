@@ -168,7 +168,7 @@ async function handleAuth(request: Request, env: StoreEnv, path: string): Promis
     if (!supplied || !(await constantTimeTextEqual(supplied, env.ADMIN_SETUP_TOKEN))) return json({ error: "Invalid setup token." }, 403);
     const email = String(body.email || "").trim().toLowerCase();
     const password = String(body.password || "");
-    if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) return json({ error: "Enter a valid email address." }, 400);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json({ error: "Enter a valid email address." }, 400);
     if (password.length < 12 || password.length > 128) return json({ error: "Use a password with at least 12 characters." }, 400);
     const admin: AdminRow = { id: crypto.randomUUID(), email, password_hash: await passwordHash(password) };
     try {
@@ -243,7 +243,7 @@ async function handleProducts(request: Request, env: StoreEnv, path: string): Pr
     const row = await env.DB.prepare("SELECT * FROM products WHERE id = ?").bind(id).first<ProductRow>();
     return json({ product: row ? productOutput(row) : null }, 201);
   }
-  const productMatch = path.match(/^\\/api\\/admin\\/products\\/([a-zA-Z0-9-]+)$/);
+  const productMatch = path.match(/^\/api\/admin\/products\/([a-zA-Z0-9-]+)$/);
   if (productMatch && (request.method === "PUT" || request.method === "DELETE")) {
     const admin = await requireAdmin(request, env); if (isResponse(admin)) return admin;
     const id = productMatch[1];
@@ -290,9 +290,9 @@ function validateProduct(body: Record<string, unknown>) {
   if (!Number.isFinite(price) || price < 0 || price > 10000000) return json({ error: "Enter a valid price in Ghana cedis." }, 400);
   if (!Number.isFinite(stock) || stockQuantity < 0 || stockQuantity > 10000000) return json({ error: "Enter a valid stock quantity." }, 400);
   if (description.length > 2000) return json({ error: "Description is too long." }, 400);
-  if (imageKey && !/^products\\/[0-9a-f-]+\\.(jpg|png|webp|avif)$/.test(imageKey)) return json({ error: "Invalid product image." }, 400);
+  if (imageKey && !/^products\/[0-9a-f-]+\.(jpg|png|webp|avif)$/.test(imageKey)) return json({ error: "Invalid product image." }, 400);
   if (category === "medicine" && requiresPrescription && !batchNumber) return json({ error: "Prescription products must include a batch number before being listed." }, 400);
-  if (expiryDate && !/^\\d{4}-\\d{2}-\\d{2}$/.test(expiryDate)) return json({ error: "Use YYYY-MM-DD for expiry date." }, 400);
+  if (expiryDate && !/^\d{4}-\d{2}-\d{2}$/.test(expiryDate)) return json({ error: "Use YYYY-MM-DD for expiry date." }, 400);
   return { sku, name, category, description, pricePesewas, stockQuantity, imageKey, attributes, requiresPrescription, batchNumber, expiryDate, isActive };
 }
 
@@ -315,7 +315,7 @@ async function handleCategories(request: Request, env: StoreEnv, path: string): 
     } catch { return json({ error: "That category already exists." }, 409); }
     return json({ category: { slug, name } }, 201);
   }
-  const match = path.match(/^\\/api\\/admin\\/categories\\/([a-z0-9-]+)$/);
+  const match = path.match(/^\/api\/admin\/categories\/([a-z0-9-]+)$/);
   if (match && (request.method === "PUT" || request.method === "DELETE")) {
     const admin = await requireAdmin(request, env); if (isResponse(admin)) return admin;
     const slug = match[1];
@@ -355,7 +355,7 @@ async function handleUploads(request: Request, env: StoreEnv): Promise<Response>
 async function handleMedia(request: Request, env: StoreEnv, path: string): Promise<Response | null> {
   if (request.method !== "GET" || !path.startsWith("/api/media/")) return null;
   const key = decodeURIComponent(path.slice("/api/media/".length));
-  if (!/^products\\/[0-9a-f-]+\\.(jpg|png|webp|avif)$/.test(key)) return new Response("Not found", { status: 404 });
+  if (!/^products\/[0-9a-f-]+\.(jpg|png|webp|avif)$/.test(key)) return new Response("Not found", { status: 404 });
   const object = await env.IMAGES.get(key);
   if (!object) return new Response("Not found", { status: 404 });
   const headers = new Headers();
