@@ -20,11 +20,12 @@ const ALLOWED_IMAGES: Record<string, string> = {
   "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/avif": "avif"
 };
 
-const json = (data: unknown, status = 200, headers: HeadersInit = {}) =>
-  new Response(JSON.stringify(data), {
-    status,
-    headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...headers }
-  });
+const json = (data: unknown, status = 200, headers: HeadersInit = {}) => {
+  const responseHeaders = new Headers(headers);
+  responseHeaders.set("content-type", "application/json; charset=utf-8");
+  responseHeaders.set("cache-control", "no-store");
+  return new Response(JSON.stringify(data), { status, headers: responseHeaders });
+};
 
 const nowSeconds = () => Math.floor(Date.now() / 1000);
 const encoder = new TextEncoder();
@@ -172,8 +173,9 @@ async function handleAuth(request: Request, env: StoreEnv, path: string): Promis
     if (password.length < 12 || password.length > 128) return json({ error: "Use a password with at least 12 characters." }, 400);
     const admin: AdminRow = { id: crypto.randomUUID(), email, password_hash: await passwordHash(password) };
     try {
-      await env.DB.prepare("INSERT INTO admins (id, email, password_hash, created_at) VALUES (?, ?, ?, ?)")
+      const inserted = await env.DB.prepare("INSERT INTO admins (id, email, password_hash, created_at) SELECT ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM admins)")
         .bind(admin.id, email, admin.password_hash, nowSeconds()).run();
+      if (Number(inserted.meta.changes || 0) !== 1) return json({ error: "Admin setup has already been completed." }, 409);
     } catch {
       return json({ error: "An admin account already exists or the email is already registered." }, 409);
     }
@@ -183,15 +185,17 @@ async function handleAuth(request: Request, env: StoreEnv, path: string): Promis
   if (path === "/api/admin/login" && request.method === "POST") {
     let body: { email?: string; password?: string };
     try { body = await request.json() as typeof body; } catch { return json({ error: "Invalid JSON body." }, 400); }
+    const password = String(body.password || "");
+    if (password.length > 128) return json({ error: "Password is too long." }, 400);
     const ip = request.headers.get("cf-connecting-ip") || "unknown";
     const ipHash = await sha256(ip);
+    await env.DB.prepare("DELETE FROM login_attempts WHERE attempted_at < ?").bind(nowSeconds() - 86400).run();
     const recent = await env.DB.prepare("SELECT COUNT(*) AS count FROM login_attempts WHERE ip_hash = ? AND attempted_at > ?")
       .bind(ipHash, nowSeconds() - 900).first<{ count: number }>();
     if (Number(recent?.count || 0) >= 8) return json({ error: "Too many sign-in attempts. Try again in 15 minutes." }, 429);
     await env.DB.prepare("INSERT INTO login_attempts (id, ip_hash, attempted_at) VALUES (?, ?, ?)")
       .bind(crypto.randomUUID(), ipHash, nowSeconds()).run();
     const email = String(body.email || "").trim().toLowerCase();
-    const password = String(body.password || "");
     const admin = await env.DB.prepare("SELECT id, email, password_hash FROM admins WHERE email = ? COLLATE NOCASE")
       .bind(email).first<AdminRow>();
     const valid = admin ? await verifyPassword(password, admin.password_hash) : false;
@@ -263,6 +267,7 @@ async function handleProducts(request: Request, env: StoreEnv, path: string): Pr
       await env.DB.prepare("UPDATE products SET sku=?, name=?, category_slug=?, description=?, price_pesewas=?, stock_quantity=?, is_active=?, image_key=?, attributes_json=?, requires_prescription=?, batch_number=?, expiry_date=?, updated_at=? WHERE id=?")
         .bind(values.sku, values.name, values.category, values.description, values.pricePesewas, values.stockQuantity, values.isActive ? 1 : 0, values.imageKey, JSON.stringify(values.attributes), values.requiresPrescription ? 1 : 0, values.batchNumber, values.expiryDate, nowSeconds(), id).run();
     } catch { return json({ error: "Could not update product. Check that its SKU is unique." }, 409); }
+    if (existing.image_key && existing.image_key !== values.imageKey) await env.IMAGES.delete(existing.image_key);
     const row = await env.DB.prepare("SELECT * FROM products WHERE id = ?").bind(id).first<ProductRow>();
     return json({ product: row ? productOutput(row) : null });
   }
