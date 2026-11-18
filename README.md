@@ -16,6 +16,16 @@ A single-business conversational shopping experience for food, clothing and ever
 - R2 product image uploads (JPG, PNG, WebP and AVIF; maximum 5 MB) with signature checks.
 - Sample catalogue rows in the initial D1 migration.
 
+## Live deployment
+
+The first Worker deployment is live at:
+
+- Storefront: https://conversational-store.edougan.workers.dev
+- GitHub source: https://github.com/douganemma/Store
+- Automatic production builds: enabled for pushes to `main`
+
+The Worker is connected to GitHub through Cloudflare Workers Builds. Each push to `main` builds and deploys the project.
+
 ## Cloudflare resources already created
 
 The resources were created in the connected Cloudflare account:
@@ -28,17 +38,14 @@ The initial schema and sample catalogue have already been applied to D1. The Wor
 
 ## First-time admin setup
 
-Before the Worker is deployed, create a secret named `ADMIN_SETUP_TOKEN` in the Worker settings:
+The live Worker already has an `ADMIN_SETUP_TOKEN` secret configured. Use the one-time token shared separately in the setup instructions to create your admin account.
 
-1. Open Cloudflare Dashboard → Workers & Pages.
-2. Select the `conversational-store` Worker after the first deployment.
-3. Open Settings → Variables and Secrets.
-4. Add a **Secret** named `ADMIN_SETUP_TOKEN` with a long, random value (at least 32 characters).
-5. Redeploy the Worker so the secret is available.
+1. Open the live storefront.
+2. Select **Admin login**.
+3. Choose **First time? Set up the admin account**.
+4. Enter the one-time setup token, your admin email and a password of at least 12 characters.
 
-Then open the storefront, select **Admin login**, choose **First time? Set up the admin account**, and enter that one-time setup token, your admin email and a password of at least 12 characters. The first admin account is created once; the setup endpoint will refuse subsequent setup attempts.
-
-Keep the setup token private. Do not commit it to GitHub or put it in a normal text variable.
+The first admin account is created once; the setup endpoint refuses subsequent setup attempts. Keep the token private and never commit it to GitHub. To rotate it later, open Cloudflare Dashboard → Workers & Pages → `conversational-store` → Settings → Variables and Secrets.
 
 ## Local development and deployment
 
