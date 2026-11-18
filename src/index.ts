@@ -547,21 +547,26 @@ async function handleChat(request: Request, env: StoreEnv): Promise<Response> {
     .filter(item => (item.role === "user" || item.role === "assistant") && typeof item.content === "string")
     .slice(-8)
     .map(item => ({ role: item.role as "user" | "assistant", content: String(item.content).slice(0, 1200) }));
+  const identity = await cartIdentity(request, env);
+  const currentCart = await readCart(env, identity.id);
+  const cartContext = currentCart.items.map(item => ({ name: item.product.name, quantity: item.quantity }));
 
   const systemPrompt = [
     "You are the friendly AI shopping assistant for this Ghana-based online shop.",
     "Help customers discover food, clothing and everyday health essentials; understand natural language and ask concise follow-up questions when needed.",
     "Use only the supplied live catalogue for product names, prices, availability and claims. Never invent products, prices, discounts, stock or delivery promises.",
     "Prices are in Ghana cedis (GHS). The store currently supports cash on delivery; customers pay the delivery agent when the order arrives.",
-    "You can help customers browse and choose, but do not claim to have added items to the cart or placed an order. Tell them to use the product card/cart checkout to do that.",
+    "Customers can ask you to add an item to their cart. When they clearly request adding or buying a specific catalogue product, set action to {type:'add_to_cart', productId:'exact catalogue ID', quantity:integer}. Only choose a product from the live catalogue. If the product is ambiguous, ask a clarifying question and set action to {type:'none'}. Never claim an item was added; the website will perform the action and confirm it.",
+    "Do not claim to have placed an order. To review the cart or check out, customers can say 'show my cart' or 'checkout'; the website will open the cart and delivery form.",
+    "Current cart context will be supplied where available. You may answer questions about its contents, but do not alter cart quantities except using the add_to_cart action.",
     "For medicines or symptoms, do not diagnose, prescribe, recommend a treatment or suggest a dosage. You may provide neutral catalogue information for non-prescription health essentials and direct medicine/symptom questions to a licensed pharmacist. Prescription-only products are not available for online checkout.",
     "Be warm, concise and clear. If no catalogue item fits, say so and ask what they are looking for.",
-    "Return ONLY valid JSON with exactly this shape: {\"reply\":\"customer-facing answer\",\"productIds\":[\"catalogue-id\"]}. Select at most 6 IDs from the supplied catalogue, and only when they are relevant to the customer's request. Use an empty array if no product cards are useful."
+    "Return ONLY valid JSON with exactly this shape: {\"reply\":\"customer-facing answer\",\"productIds\":[\"catalogue-id\"],\"action\":{\"type\":\"none\"}}. For a clear add request, use action {\"type\":\"add_to_cart\",\"productId\":\"exact catalogue-id\",\"quantity\":1}. Select at most 6 productIds from the supplied catalogue. Never return an ID not in the catalogue. Use an empty array if no product cards are useful."
   ].join("\n");
   try {
     const generated = await env.AI.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast", {
       messages: [
-        { role: "system", content: systemPrompt + "\nLive catalogue: " + JSON.stringify(catalogueContext) },
+        { role: "system", content: systemPrompt + "\nLive catalogue: " + JSON.stringify(catalogueContext) + "\nCurrent customer cart: " + JSON.stringify(cartContext) },
         ...history,
         { role: "user", content: message }
       ],
@@ -574,7 +579,7 @@ async function handleChat(request: Request, env: StoreEnv): Promise<Response> {
       : typeof generated.choices?.[0]?.message?.content === "string" ? generated.choices[0].message.content
       : "").trim();
     const cleaned = raw.replace(/^\x60{3}(?:json)?\s*/i, "").replace(/\s*\x60{3}$/, "");
-    let parsed: { reply?: string; productIds?: string[] } = {};
+    let parsed: { reply?: string; productIds?: string[]; action?: { type?: string; productId?: string; quantity?: number } } = {};
     if (responseValue && typeof responseValue === "object" && !Array.isArray(responseValue)) {
       parsed = responseValue as { reply?: string; productIds?: string[] };
     } else {
@@ -586,7 +591,18 @@ async function handleChat(request: Request, env: StoreEnv): Promise<Response> {
     const selectedIds = Array.isArray(parsed.productIds) ? parsed.productIds.slice(0, 6) : [];
     const selected = new Set(selectedIds.filter(id => typeof id === "string"));
     const products = available.filter(product => selected.has(product.id)).slice(0, 6);
-    return json({ reply, products, ai: true });
+    const requestedAction = parsed.action;
+    let action: { type: "add_to_cart"; productId: string; quantity: number } | { type: "none" } = { type: "none" };
+    if (requestedAction?.type === "add_to_cart" && typeof requestedAction.productId === "string") {
+      const target = available.find(product => product.id === requestedAction.productId);
+      const quantity = Number(requestedAction.quantity ?? 1);
+      if (target && Number.isInteger(quantity) && quantity >= 1 && quantity <= 99) {
+        action = { type: "add_to_cart", productId: target.id, quantity };
+        if (!products.some(product => product.id === target.id)) products.unshift(target);
+      }
+    }
+    return json({ reply, products: products.slice(0, 6), action, ai: true }, 200,
+      identity.setCookie ? { "set-cookie": identity.setCookie } : {});
   } catch (error) {
     console.error(JSON.stringify({ message: "Workers AI chat request failed", error: error instanceof Error ? error.message : String(error) }));
     return json({ error: "The AI shopping assistant is temporarily unavailable. Please try again shortly." }, 503);
