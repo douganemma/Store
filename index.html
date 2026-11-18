@@ -130,7 +130,8 @@ function productCards(products){
   });
   messages.append(wrap);
 }
-async function sendMessage(text){if(!text.trim())return;bubble(text,"user");try{const r=await fetch("/api/chat",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({message:text})});const data=await r.json();bubble(data.reply||data.error||"Something went wrong.");if(data.products?.length)productCards(data.products);}catch{bubble("I can’t reach the store service right now. Please try again.");}}
+const chatHistory=[];
+async function sendMessage(text){if(!text.trim())return;bubble(text,"user");try{const r=await fetch("/api/chat",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({message:text,history:chatHistory.slice(-8)})});const data=await r.json();const reply=data.reply||data.error||"Something went wrong.";bubble(reply);if(r.ok){chatHistory.push({role:"user",content:text},{role:"assistant",content:reply});if(chatHistory.length>8)chatHistory.splice(0,chatHistory.length-8);}if(data.products?.length)productCards(data.products);}catch{bubble("I can’t reach the store service right now. Please try again.");}}
 form.addEventListener("submit",e=>{e.preventDefault();const value=input.value;input.value="";sendMessage(value);});
 document.querySelectorAll("[data-prompt]").forEach(b=>b.addEventListener("click",()=>sendMessage(b.dataset.prompt)));
 document.querySelectorAll(".category").forEach(b=>b.addEventListener("click",()=>sendMessage("Show me "+b.dataset.category)));
