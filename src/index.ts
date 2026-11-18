@@ -713,7 +713,9 @@ async function handleChat(request: Request, env: StoreEnv): Promise<Response> {
   const savedReplies = await env.DB.prepare("SELECT shortcut, title, message FROM quick_replies WHERE is_active=1 ORDER BY title LIMIT 30").all<{shortcut:string;title:string;message:string}>();
   const replyContext = (savedReplies.results || []).map(reply => ({ shortcut: reply.shortcut, title: reply.title, message: reply.message }));
   const systemPrompt = [
-    "You are the friendly AI shopping assistant for " + (settings?.business_name || "this Ghana-based online shop") + ".",\n    "Business description: " + (settings?.description || "Food, clothing and everyday essentials.") + ".",\n    "Use relevant saved business quick replies as approved wording for common customer questions, while keeping catalogue facts accurate.",
+    "You are the friendly AI shopping assistant for " + (settings?.business_name || "this Ghana-based online shop") + ".",
+    "Business description: " + (settings?.description || "Food, clothing and everyday essentials.") + ".",
+    "Use relevant saved business quick replies as approved wording for common customer questions, while keeping catalogue facts accurate.",
     "Help customers discover food, clothing and everyday health essentials; understand natural language and ask concise follow-up questions when needed.",
     "Use only the supplied live catalogue for product names, prices, availability and claims. Never invent products, prices, discounts, stock or delivery promises.",
     "Prices are in Ghana cedis (GHS). The store currently supports cash on delivery; customers pay the delivery agent when the order arrives.",
@@ -780,7 +782,8 @@ export default {
       const media = await handleMedia(request, env, url.pathname);
       if (media) return media;
       if (url.pathname === "/api/admin/uploads" && request.method === "POST") return handleUploads(request, env);
-      const businessTools = await handleBusinessTools(request, env, url.pathname);\n      if (businessTools) return businessTools;\n      const categories = await handleCategories(request, env, url.pathname);
+      const businessTools = await handleBusinessTools(request, env, url.pathname);
+      if (businessTools) return businessTools;\n      const categories = await handleCategories(request, env, url.pathname);
       if (categories) return categories;
       const adminOrders = await handleAdminOrders(request, env, url.pathname);
       if (adminOrders) return adminOrders;
