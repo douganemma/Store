@@ -480,7 +480,8 @@ async function handleCheckout(request: Request, env: StoreEnv): Promise<Response
   const results = await env.DB.batch(deductions);
   const failed = results.some(result => Number(result.meta.changes || 0) !== 1);
   if (failed) {
-    await env.DB.batch(cart.items.map(item => env.DB.prepare("UPDATE products SET stock_quantity=stock_quantity+?, updated_at=? WHERE id=?").bind(item.quantity, now, item.product.id)));
+    await env.DB.batch(cart.items.filter((_, index) => Number(results[index]?.meta.changes || 0) === 1)
+      .map(item => env.DB.prepare("UPDATE products SET stock_quantity=stock_quantity+?, updated_at=? WHERE id=?").bind(item.quantity, now, item.product.id)));
     return json({ error: "One or more items just went out of stock. Please review your cart." }, 409);
   }
   const total = cart.subtotalPesewas;
@@ -516,6 +517,7 @@ async function handleAdminOrders(request: Request, env: StoreEnv, path: string):
     if (!allowed.includes(String(body.status))) return json({ error: "Choose a valid order status." }, 400);
     const order = await env.DB.prepare("SELECT id, order_status FROM orders WHERE id=?").bind(match[1]).first<{id:string;order_status:string}>();
     if (!order) return json({ error: "Order not found." }, 404);
+    if (order.order_status === "cancelled" && body.status !== "cancelled") return json({ error: "Cancelled orders cannot be reopened. Create a new order instead." }, 409);
     if (body.status === "cancelled" && order.order_status !== "cancelled") {
       const items = await env.DB.prepare("SELECT product_id, quantity FROM order_items WHERE order_id=? AND product_id IS NOT NULL").bind(order.id).all<{product_id:string;quantity:number}>();
       await env.DB.batch((items.results || []).map(item => env.DB.prepare("UPDATE products SET stock_quantity=stock_quantity+?, updated_at=? WHERE id=?").bind(item.quantity, nowSeconds(), item.product_id)));
