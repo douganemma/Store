@@ -529,6 +529,164 @@ async function handleAdminOrders(request: Request, env: StoreEnv, path: string):
   return null;
 }
 
+
+type StoreSettingsRow = {
+  id: number; business_name: string; tagline: string; description: string; phone: string; email: string;
+  address: string; opening_hours: string; greeting_message: string; away_message: string;
+  away_enabled: number; updated_at: number;
+};
+
+async function handleBusinessTools(request: Request, env: StoreEnv, path: string): Promise<Response | null> {
+  if (path === "/api/storefront" && request.method === "GET") {
+    const settings = await env.DB.prepare("SELECT * FROM store_settings WHERE id=1").first<StoreSettingsRow>();
+    return json({ settings: settings ? {
+      businessName: settings.business_name, tagline: settings.tagline, description: settings.description,
+      phone: settings.phone, email: settings.email, address: settings.address, openingHours: settings.opening_hours,
+      greetingMessage: settings.greeting_message, awayMessage: settings.away_message, awayEnabled: Boolean(settings.away_enabled)
+    } : null });
+  }
+  if (path === "/api/collections" && request.method === "GET") {
+    const rows = await env.DB.prepare("SELECT id, slug, name, description FROM collections WHERE is_active=1 ORDER BY name").all<{id:string;slug:string;name:string;description:string}>();
+    const products = await listProducts(env);
+    const collections = await Promise.all((rows.results || []).map(async collection => {
+      const links = await env.DB.prepare("SELECT product_id FROM collection_products WHERE collection_id=? ORDER BY sort_order, product_id").bind(collection.id).all<{product_id:string}>();
+      const ids = new Set((links.results || []).map(link => link.product_id));
+      return { id: collection.id, slug: collection.slug, name: collection.name, description: collection.description, products: products.filter(product => ids.has(product.id)) };
+    }));
+    return json({ collections });
+  }
+  if (path === "/api/quick-replies" && request.method === "GET") {
+    const rows = await env.DB.prepare("SELECT shortcut, title, message FROM quick_replies WHERE is_active=1 ORDER BY title LIMIT 30").all();
+    return json({ quickReplies: rows.results || [] });
+  }
+  if (path === "/api/admin/store-settings" && request.method === "GET") {
+    const admin = await requireAdmin(request, env); if (isResponse(admin)) return admin;
+    const settings = await env.DB.prepare("SELECT * FROM store_settings WHERE id=1").first<StoreSettingsRow>();
+    return json({ settings: settings ? {
+      businessName: settings.business_name, tagline: settings.tagline, description: settings.description,
+      phone: settings.phone, email: settings.email, address: settings.address, openingHours: settings.opening_hours,
+      greetingMessage: settings.greeting_message, awayMessage: settings.away_message, awayEnabled: Boolean(settings.away_enabled)
+    } : null });
+  }
+  if (path === "/api/admin/store-settings" && request.method === "PUT") {
+    const admin = await requireAdmin(request, env); if (isResponse(admin)) return admin;
+    let body: Record<string, unknown>;
+    try { body = await request.json() as Record<string, unknown>; } catch { return json({ error: "Invalid JSON body." }, 400); }
+    const value = (key: string, max: number, fallback = "") => String(body[key] ?? fallback).trim().slice(0, max);
+    const businessName = value("businessName", 100, "MarketMate");
+    const tagline = value("tagline", 140, "Your shop, in a chat.");
+    const description = value("description", 500);
+    const phone = value("phone", 30);
+    const email = value("email", 160);
+    const address = value("address", 300);
+    const openingHours = value("openingHours", 500);
+    const greeting = value("greetingMessage", 600, "Hi there! 👋 Welcome. What can I help you find today?");
+    const away = value("awayMessage", 600, "Thanks for messaging us. We are currently away, but you can still browse the catalogue and add items to your cart.");
+    if (businessName.length < 2 || greeting.length < 2 || away.length < 2) return json({ error: "Business name, greeting and away message are required." }, 400);
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json({ error: "Enter a valid business email." }, 400);
+    await env.DB.prepare("UPDATE store_settings SET business_name=?, tagline=?, description=?, phone=?, email=?, address=?, opening_hours=?, greeting_message=?, away_message=?, away_enabled=?, updated_at=? WHERE id=1")
+      .bind(businessName, tagline, description, phone, email, address, openingHours, greeting, away, body.awayEnabled === true ? 1 : 0, nowSeconds()).run();
+    return json({ ok: true });
+  }
+  if (path === "/api/admin/quick-replies" && request.method === "GET") {
+    const admin = await requireAdmin(request, env); if (isResponse(admin)) return admin;
+    const rows = await env.DB.prepare("SELECT id, shortcut, title, message, is_active AS isActive FROM quick_replies ORDER BY title").all();
+    return json({ quickReplies: rows.results || [] });
+  }
+  if (path === "/api/admin/quick-replies" && request.method === "POST") {
+    const admin = await requireAdmin(request, env); if (isResponse(admin)) return admin;
+    let body: { shortcut?: string; title?: string; message?: string };
+    try { body = await request.json() as typeof body; } catch { return json({ error: "Invalid JSON body." }, 400); }
+    const shortcut = String(body.shortcut || "").trim().toLowerCase().replace(/^\//, "");
+    const title = String(body.title || "").trim().slice(0, 80);
+    const message = String(body.message || "").trim().slice(0, 800);
+    if (!/^[a-z0-9_-]{2,30}$/.test(shortcut) || title.length < 2 || message.length < 2) return json({ error: "Enter a shortcut (2–30 letters/numbers), title and reply message." }, 400);
+    try {
+      await env.DB.prepare("INSERT INTO quick_replies (id, shortcut, title, message, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?)")
+        .bind(crypto.randomUUID(), shortcut, title, message, nowSeconds(), nowSeconds()).run();
+    } catch { return json({ error: "That quick-reply shortcut already exists." }, 409); }
+    return json({ ok: true }, 201);
+  }
+  const quickReplyMatch = path.match(/^\/api\/admin\/quick-replies\/([a-f0-9-]+)$/);
+  if (quickReplyMatch && (request.method === "PUT" || request.method === "DELETE")) {
+    const admin = await requireAdmin(request, env); if (isResponse(admin)) return admin;
+    if (request.method === "DELETE") {
+      await env.DB.prepare("DELETE FROM quick_replies WHERE id=?").bind(quickReplyMatch[1]).run();
+      return json({ ok: true });
+    }
+    let body: { shortcut?: string; title?: string; message?: string; isActive?: boolean };
+    try { body = await request.json() as typeof body; } catch { return json({ error: "Invalid JSON body." }, 400); }
+    const shortcut = String(body.shortcut || "").trim().toLowerCase().replace(/^\//, "");
+    const title = String(body.title || "").trim().slice(0, 80);
+    const message = String(body.message || "").trim().slice(0, 800);
+    if (!/^[a-z0-9_-]{2,30}$/.test(shortcut) || title.length < 2 || message.length < 2) return json({ error: "Enter a valid shortcut, title and reply message." }, 400);
+    try {
+      await env.DB.prepare("UPDATE quick_replies SET shortcut=?, title=?, message=?, is_active=?, updated_at=? WHERE id=?")
+        .bind(shortcut, title, message, body.isActive === false ? 0 : 1, nowSeconds(), quickReplyMatch[1]).run();
+    } catch { return json({ error: "That quick-reply shortcut already exists." }, 409); }
+    return json({ ok: true });
+  }
+  if (path === "/api/admin/collections" && request.method === "GET") {
+    const admin = await requireAdmin(request, env); if (isResponse(admin)) return admin;
+    const rows = await env.DB.prepare("SELECT id, slug, name, description, is_active AS isActive FROM collections ORDER BY name").all<{id:string;slug:string;name:string;description:string;isActive:number}>();
+    const collections = await Promise.all((rows.results || []).map(async collection => {
+      const links = await env.DB.prepare("SELECT product_id FROM collection_products WHERE collection_id=? ORDER BY sort_order").bind(collection.id).all<{product_id:string}>();
+      return { ...collection, productIds: (links.results || []).map(link => link.product_id) };
+    }));
+    return json({ collections });
+  }
+  if (path === "/api/admin/collections" && request.method === "POST") {
+    const admin = await requireAdmin(request, env); if (isResponse(admin)) return admin;
+    let body: { name?: string; description?: string; productIds?: string[] };
+    try { body = await request.json() as typeof body; } catch { return json({ error: "Invalid JSON body." }, 400); }
+    const name = String(body.name || "").trim().slice(0, 80);
+    const slug = slugify(name);
+    const description = String(body.description || "").trim().slice(0, 500);
+    const productIds = Array.isArray(body.productIds) ? [...new Set(body.productIds.filter(id => typeof id === "string" && /^[a-zA-Z0-9-]{1,80}$/.test(id)))].slice(0, 50) : [];
+    if (name.length < 2 || !slug) return json({ error: "Enter a collection name." }, 400);
+    if (productIds.length) {
+      const found = await env.DB.prepare("SELECT COUNT(*) AS count FROM products WHERE id IN (" + productIds.map(() => "?").join(",") + ")").bind(...productIds).first<{count:number}>();
+      if (Number(found?.count || 0) !== productIds.length) return json({ error: "One or more selected products could not be found." }, 400);
+    }
+    const id = crypto.randomUUID();
+    try {
+      await env.DB.prepare("INSERT INTO collections (id, slug, name, description, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?)")
+        .bind(id, slug, name, description, nowSeconds(), nowSeconds()).run();
+      if (productIds.length) await env.DB.batch(productIds.map((productId, index) => env.DB.prepare("INSERT INTO collection_products (collection_id, product_id, sort_order) VALUES (?, ?, ?)")
+        .bind(id, productId, index)));
+    } catch { return json({ error: "Could not save collection. Check that its name is unique." }, 409); }
+    return json({ ok: true }, 201);
+  }
+  const collectionMatch = path.match(/^\/api\/admin\/collections\/([a-f0-9-]+)$/);
+  if (collectionMatch && (request.method === "PUT" || request.method === "DELETE")) {
+    const admin = await requireAdmin(request, env); if (isResponse(admin)) return admin;
+    if (request.method === "DELETE") {
+      await env.DB.prepare("DELETE FROM collections WHERE id=?").bind(collectionMatch[1]).run();
+      return json({ ok: true });
+    }
+    let body: { name?: string; description?: string; productIds?: string[]; isActive?: boolean };
+    try { body = await request.json() as typeof body; } catch { return json({ error: "Invalid JSON body." }, 400); }
+    const name = String(body.name || "").trim().slice(0, 80);
+    const slug = slugify(name);
+    const description = String(body.description || "").trim().slice(0, 500);
+    const productIds = Array.isArray(body.productIds) ? [...new Set(body.productIds.filter(id => typeof id === "string" && /^[a-zA-Z0-9-]{1,80}$/.test(id)))].slice(0, 50) : [];
+    if (name.length < 2 || !slug) return json({ error: "Enter a collection name." }, 400);
+    if (productIds.length) {
+      const found = await env.DB.prepare("SELECT COUNT(*) AS count FROM products WHERE id IN (" + productIds.map(() => "?").join(",") + ")").bind(...productIds).first<{count:number}>();
+      if (Number(found?.count || 0) !== productIds.length) return json({ error: "One or more selected products could not be found." }, 400);
+    }
+    try {
+      await env.DB.prepare("UPDATE collections SET slug=?, name=?, description=?, is_active=?, updated_at=? WHERE id=?")
+        .bind(slug, name, description, body.isActive === false ? 0 : 1, nowSeconds(), collectionMatch[1]).run();
+    } catch { return json({ error: "That collection name is already in use." }, 409); }
+    await env.DB.prepare("DELETE FROM collection_products WHERE collection_id=?").bind(collectionMatch[1]).run();
+    if (productIds.length) await env.DB.batch(productIds.map((productId, index) => env.DB.prepare("INSERT INTO collection_products (collection_id, product_id, sort_order) VALUES (?, ?, ?)")
+      .bind(collectionMatch[1], productId, index)));
+    return json({ ok: true });
+  }
+  return null;
+}
+
 async function handleChat(request: Request, env: StoreEnv): Promise<Response> {
   let body: { message?: string; history?: Array<{ role?: string; content?: string }> };
   try { body = await request.json() as typeof body; } catch { return json({ error: "Please send a valid message." }, 400); }
@@ -551,8 +709,11 @@ async function handleChat(request: Request, env: StoreEnv): Promise<Response> {
   const currentCart = await readCart(env, identity.id);
   const cartContext = currentCart.items.map(item => ({ name: item.product.name, quantity: item.quantity }));
 
+  const settings = await env.DB.prepare("SELECT business_name, description FROM store_settings WHERE id=1").first<{business_name:string;description:string}>();
+  const savedReplies = await env.DB.prepare("SELECT shortcut, title, message FROM quick_replies WHERE is_active=1 ORDER BY title LIMIT 30").all<{shortcut:string;title:string;message:string}>();
+  const replyContext = (savedReplies.results || []).map(reply => ({ shortcut: reply.shortcut, title: reply.title, message: reply.message }));
   const systemPrompt = [
-    "You are the friendly AI shopping assistant for this Ghana-based online shop.",
+    "You are the friendly AI shopping assistant for " + (settings?.business_name || "this Ghana-based online shop") + ".",\n    "Business description: " + (settings?.description || "Food, clothing and everyday essentials.") + ".",\n    "Use relevant saved business quick replies as approved wording for common customer questions, while keeping catalogue facts accurate.",
     "Help customers discover food, clothing and everyday health essentials; understand natural language and ask concise follow-up questions when needed.",
     "Use only the supplied live catalogue for product names, prices, availability and claims. Never invent products, prices, discounts, stock or delivery promises.",
     "Prices are in Ghana cedis (GHS). The store currently supports cash on delivery; customers pay the delivery agent when the order arrives.",
@@ -619,7 +780,7 @@ export default {
       const media = await handleMedia(request, env, url.pathname);
       if (media) return media;
       if (url.pathname === "/api/admin/uploads" && request.method === "POST") return handleUploads(request, env);
-      const categories = await handleCategories(request, env, url.pathname);
+      const businessTools = await handleBusinessTools(request, env, url.pathname);\n      if (businessTools) return businessTools;\n      const categories = await handleCategories(request, env, url.pathname);
       if (categories) return categories;
       const adminOrders = await handleAdminOrders(request, env, url.pathname);
       if (adminOrders) return adminOrders;
