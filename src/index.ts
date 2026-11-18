@@ -284,7 +284,7 @@ function validateProduct(body: Record<string, unknown>) {
   const pricePesewas = Math.round(price * 100);
   const stockQuantity = Math.floor(stock);
   const imageKey = body.imageKey ? String(body.imageKey) : null;
-  const attributes = body.attributes && typeof body.attributes === "object" ? body.attributes : {};
+  const attributes = body.attributes && typeof body.attributes === "object" && !Array.isArray(body.attributes) ? body.attributes : {};
   const requiresPrescription = body.requiresPrescription === true;
   const batchNumber = body.batchNumber ? String(body.batchNumber).trim().slice(0, 80) : null;
   const expiryDate = body.expiryDate ? String(body.expiryDate).trim() : null;
@@ -349,8 +349,15 @@ async function handleUploads(request: Request, env: StoreEnv): Promise<Response>
   if (file.size < 1 || file.size > MAX_IMAGE_BYTES) return json({ error: "Images must be smaller than 5 MB." }, 413);
   const extension = ALLOWED_IMAGES[file.type];
   if (!extension) return json({ error: "Use a JPG, PNG, WebP or AVIF image." }, 415);
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const validSignature =
+    (file.type === "image/jpeg" && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) ||
+    (file.type === "image/png" && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) ||
+    (file.type === "image/webp" && String.fromCharCode(...bytes.slice(0, 4)) === "RIFF" && String.fromCharCode(...bytes.slice(8, 12)) === "WEBP") ||
+    (file.type === "image/avif" && String.fromCharCode(...bytes.slice(4, 8)) === "ftyp" && ["avif", "avis"].includes(String.fromCharCode(...bytes.slice(8, 12))));
+  if (!validSignature) return json({ error: "The image file contents do not match its image type." }, 415);
   const key = "products/" + crypto.randomUUID() + "." + extension;
-  await env.IMAGES.put(key, file.stream(), {
+  await env.IMAGES.put(key, bytes, {
     httpMetadata: { contentType: file.type, cacheControl: "public, max-age=31536000, immutable" },
     customMetadata: { uploadedBy: admin.id }
   });
