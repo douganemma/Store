@@ -3,7 +3,9 @@ type StoreEnv = {
   IMAGES: R2Bucket;
   ASSETS: Fetcher;
   AI: Ai;
-  ADMIN_SETUP_TOKEN?: string;\n  WHATSAPP_VERIFY_TOKEN?: string;\n  WHATSAPP_APP_SECRET?: string;
+  ADMIN_SETUP_TOKEN?: string;
+  WHATSAPP_VERIFY_TOKEN?: string;
+  WHATSAPP_APP_SECRET?: string;
 };
 
 type AdminRow = { id: string; email: string; password_hash: string };
@@ -812,7 +814,8 @@ export default {
   async fetch(request: Request, env: StoreEnv): Promise<Response> {
     const url = new URL(request.url);
     try {
-      if (url.pathname === "/api/health") return json({ ok: true, app: "marketmate", stage: "cash-on-delivery" });\n      if (url.pathname === "/api/whatsapp/webhook") return handleWhatsAppWebhook(request, env, url);
+      if (url.pathname === "/api/health") return json({ ok: true, app: "marketmate", stage: "cash-on-delivery" });
+      if (url.pathname === "/api/whatsapp/webhook") return handleWhatsAppWebhook(request, env, url);
       const auth = await handleAuth(request, env, url.pathname);
       if (auth) return auth;
       const media = await handleMedia(request, env, url.pathname);
