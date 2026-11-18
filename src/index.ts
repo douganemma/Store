@@ -397,6 +397,135 @@ async function handleMedia(request: Request, env: StoreEnv, path: string): Promi
   return new Response(object.body, { headers });
 }
 
+
+const CART_SECONDS = 60 * 60 * 24 * 30;
+function cartCookie(token: string, request: Request): string {
+  const secure = new URL(request.url).protocol === "https:" ? "; Secure" : "";
+  return "mm_cart=" + token + "; HttpOnly; SameSite=Lax; Path=/; Max-Age=" + CART_SECONDS + secure;
+}
+async function cartIdentity(request: Request, env: StoreEnv) {
+  let token = cookieValue(request, "mm_cart");
+  let setCookie: string | null = null;
+  if (!token || token.length < 32 || token.length > 128) {
+    token = bytesToBase64Url(crypto.getRandomValues(new Uint8Array(32)));
+    setCookie = cartCookie(token, request);
+  }
+  const id = await sha256(token);
+  await env.DB.prepare("INSERT INTO carts (id, created_at, updated_at, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET updated_at=excluded.updated_at, expires_at=excluded.expires_at")
+    .bind(id, nowSeconds(), nowSeconds(), nowSeconds() + CART_SECONDS).run();
+  return { id, setCookie };
+}
+async function readCart(env: StoreEnv, cartId: string) {
+  const rows = await env.DB.prepare("SELECT p.*, ci.quantity FROM cart_items ci JOIN products p ON p.id=ci.product_id WHERE ci.cart_id=? AND p.is_active=1 ORDER BY p.name")
+    .bind(cartId).all<ProductRow & { quantity: number }>();
+  const items = (rows.results || []).map(row => ({ product: productOutput(row), quantity: row.quantity, lineTotalPesewas: row.price_pesewas * row.quantity }));
+  return { items, subtotalPesewas: items.reduce((sum, item) => sum + item.lineTotalPesewas, 0), itemCount: items.reduce((sum, item) => sum + item.quantity, 0) };
+}
+async function handleCart(request: Request, env: StoreEnv, path: string): Promise<Response | null> {
+  if (path === "/api/cart" && request.method === "GET") {
+    const identity = await cartIdentity(request, env);
+    return json(await readCart(env, identity.id), 200, identity.setCookie ? { "set-cookie": identity.setCookie } : {});
+  }
+  if (path === "/api/cart/items" && request.method === "POST") {
+    if (!originAllowed(request)) return json({ error: "Cross-origin request blocked." }, 403);
+    let body: { productId?: string; quantity?: number };
+    try { body = await request.json() as typeof body; } catch { return json({ error: "Invalid request." }, 400); }
+    const productId = String(body.productId || "");
+    const quantity = Number(body.quantity ?? 1);
+    if (!/^[a-zA-Z0-9-]{1,80}$/.test(productId) || !Number.isInteger(quantity) || quantity < 1 || quantity > 99) return json({ error: "Choose a valid product and quantity." }, 400);
+    const product = await env.DB.prepare("SELECT id, stock_quantity, is_active, requires_prescription FROM products WHERE id=?").bind(productId).first<{id:string;stock_quantity:number;is_active:number;requires_prescription:number}>();
+    if (!product || !product.is_active) return json({ error: "This product is no longer available." }, 404);
+    if (product.requires_prescription) return json({ error: "This product requires prescription verification and cannot be ordered online yet. Please contact the store." }, 400);
+    const identity = await cartIdentity(request, env);
+    const existing = await env.DB.prepare("SELECT quantity FROM cart_items WHERE cart_id=? AND product_id=?").bind(identity.id, productId).first<{quantity:number}>();
+    const next = Math.min(99, (existing?.quantity || 0) + quantity);
+    if (next > product.stock_quantity) return json({ error: "Only " + product.stock_quantity + " item(s) are currently in stock." }, 409);
+    await env.DB.prepare("INSERT INTO cart_items (cart_id, product_id, quantity, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(cart_id, product_id) DO UPDATE SET quantity=excluded.quantity, updated_at=excluded.updated_at")
+      .bind(identity.id, productId, next, nowSeconds()).run();
+    return json(await readCart(env, identity.id), 200, identity.setCookie ? { "set-cookie": identity.setCookie } : {});
+  }
+  const remove = path.match(/^\/api\/cart\/items\/([a-zA-Z0-9-]+)$/);
+  if (remove && request.method === "DELETE") {
+    if (!originAllowed(request)) return json({ error: "Cross-origin request blocked." }, 403);
+    const identity = await cartIdentity(request, env);
+    await env.DB.prepare("DELETE FROM cart_items WHERE cart_id=? AND product_id=?").bind(identity.id, remove[1]).run();
+    return json(await readCart(env, identity.id), 200, identity.setCookie ? { "set-cookie": identity.setCookie } : {});
+  }
+  return null;
+}
+async function handleCheckout(request: Request, env: StoreEnv): Promise<Response | null> {
+  if (request.method !== "POST" || new URL(request.url).pathname !== "/api/checkout") return null;
+  if (!originAllowed(request)) return json({ error: "Cross-origin request blocked." }, 403);
+  let body: { name?: string; phone?: string; email?: string; address?: string; notes?: string };
+  try { body = await request.json() as typeof body; } catch { return json({ error: "Please complete the checkout form." }, 400); }
+  const name = String(body.name || "").trim().slice(0, 100);
+  const phone = String(body.phone || "").trim().replace(/[\s()-]/g, "");
+  const email = String(body.email || "").trim().slice(0, 160);
+  const address = String(body.address || "").trim().slice(0, 500);
+  const notes = String(body.notes || "").trim().slice(0, 500);
+  if (name.length < 2) return json({ error: "Enter your full name." }, 400);
+  if (!/^(?:\+233|0)\d{9}$/.test(phone)) return json({ error: "Enter a valid Ghana phone number, e.g. 0241234567 or +233241234567." }, 400);
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json({ error: "Enter a valid email address." }, 400);
+  if (address.length < 8) return json({ error: "Enter your complete delivery address." }, 400);
+  const identity = await cartIdentity(request, env);
+  const cart = await readCart(env, identity.id);
+  if (!cart.items.length) return json({ error: "Your cart is empty." }, 400);
+  if (cart.items.some(item => item.product.requiresPrescription)) return json({ error: "Your cart contains an item that requires prescription verification. Remove it or contact the store." }, 400);
+  const orderId = crypto.randomUUID();
+  const orderNumber = "MM-" + Date.now().toString(36).toUpperCase() + "-" + bytesToBase64Url(crypto.getRandomValues(new Uint8Array(3))).toUpperCase();
+  const now = nowSeconds();
+  // Conditional stock deductions prevent checkout from selling more than the available quantity.
+  const deductions = cart.items.map(item => env.DB.prepare("UPDATE products SET stock_quantity=stock_quantity-?, updated_at=? WHERE id=? AND is_active=1 AND stock_quantity>=?")
+    .bind(item.quantity, now, item.product.id, item.quantity));
+  const results = await env.DB.batch(deductions);
+  const failed = results.some(result => Number(result.meta.changes || 0) !== 1);
+  if (failed) {
+    await env.DB.batch(cart.items.map(item => env.DB.prepare("UPDATE products SET stock_quantity=stock_quantity+?, updated_at=? WHERE id=?").bind(item.quantity, now, item.product.id)));
+    return json({ error: "One or more items just went out of stock. Please review your cart." }, 409);
+  }
+  const total = cart.subtotalPesewas;
+  const orderStatements = [
+    env.DB.prepare("INSERT INTO orders (id, order_number, customer_name, phone, email, delivery_address, delivery_notes, subtotal_pesewas, delivery_fee_pesewas, total_pesewas, currency, payment_method, payment_status, order_status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 'GHS', 'cash_on_delivery', 'pay_on_delivery', 'pending_confirmation', ?, ?)")
+      .bind(orderId, orderNumber, name, phone, email, address, notes, total, total, now, now),
+    ...cart.items.map(item => env.DB.prepare("INSERT INTO order_items (id, order_id, product_id, product_name, sku, unit_price_pesewas, quantity, line_total_pesewas) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .bind(crypto.randomUUID(), orderId, item.product.id, item.product.name, item.product.sku, item.product.pricePesewas, item.quantity, item.lineTotalPesewas)),
+    env.DB.prepare("DELETE FROM cart_items WHERE cart_id=?").bind(identity.id)
+  ];
+  try { await env.DB.batch(orderStatements); }
+  catch (error) {
+    await env.DB.batch(cart.items.map(item => env.DB.prepare("UPDATE products SET stock_quantity=stock_quantity+?, updated_at=? WHERE id=?").bind(item.quantity, now, item.product.id)));
+    throw error;
+  }
+  return json({ ok: true, orderNumber, total: total / 100, currency: "GHS", paymentMethod: "Cash on delivery", message: "Order received. Pay the delivery agent when your order arrives." }, 201);
+}
+async function handleAdminOrders(request: Request, env: StoreEnv, path: string): Promise<Response | null> {
+  if (path === "/api/admin/orders" && request.method === "GET") {
+    const admin = await requireAdmin(request, env); if (isResponse(admin)) return admin;
+    const rows = await env.DB.prepare("SELECT * FROM orders ORDER BY created_at DESC LIMIT 200").all<Record<string, unknown>>();
+    const orders = await Promise.all((rows.results || []).map(async order => {
+      const items = await env.DB.prepare("SELECT product_name AS name, sku, unit_price_pesewas AS unitPricePesewas, quantity, line_total_pesewas AS lineTotalPesewas FROM order_items WHERE order_id=?").bind(order.id).all();
+      return { ...order, items: items.results || [] };
+    }));
+    return json({ orders });
+  }
+  const match = path.match(/^\/api\/admin\/orders\/([a-f0-9-]+)$/);
+  if (match && request.method === "PATCH") {
+    const admin = await requireAdmin(request, env); if (isResponse(admin)) return admin;
+    let body: { status?: string }; try { body = await request.json() as typeof body; } catch { return json({ error: "Invalid request." }, 400); }
+    const allowed = ["pending_confirmation", "confirmed", "processing", "dispatched", "delivered", "cancelled"];
+    if (!allowed.includes(String(body.status))) return json({ error: "Choose a valid order status." }, 400);
+    const order = await env.DB.prepare("SELECT id, order_status FROM orders WHERE id=?").bind(match[1]).first<{id:string;order_status:string}>();
+    if (!order) return json({ error: "Order not found." }, 404);
+    if (body.status === "cancelled" && order.order_status !== "cancelled") {
+      const items = await env.DB.prepare("SELECT product_id, quantity FROM order_items WHERE order_id=? AND product_id IS NOT NULL").bind(order.id).all<{product_id:string;quantity:number}>();
+      await env.DB.batch((items.results || []).map(item => env.DB.prepare("UPDATE products SET stock_quantity=stock_quantity+?, updated_at=? WHERE id=?").bind(item.quantity, nowSeconds(), item.product_id)));
+    }
+    await env.DB.prepare("UPDATE orders SET order_status=?, updated_at=? WHERE id=?").bind(body.status, nowSeconds(), match[1]).run();
+    return json({ ok: true });
+  }
+  return null;
+}
+
 async function handleChat(request: Request, env: StoreEnv): Promise<Response> {
   let body: { message?: string };
   try { body = await request.json() as typeof body; } catch { return json({ error: "Please send a valid message." }, 400); }
@@ -419,7 +548,7 @@ export default {
   async fetch(request: Request, env: StoreEnv): Promise<Response> {
     const url = new URL(request.url);
     try {
-      if (url.pathname === "/api/health") return json({ ok: true, app: "marketmate", stage: "database-admin" });
+      if (url.pathname === "/api/health") return json({ ok: true, app: "marketmate", stage: "cash-on-delivery" });
       const auth = await handleAuth(request, env, url.pathname);
       if (auth) return auth;
       const media = await handleMedia(request, env, url.pathname);
