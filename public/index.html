@@ -74,6 +74,7 @@
                 <div class="field"><label for="productImage">Product image (max 5 MB)</label><input id="productImage" type="file" accept="image/jpeg,image/png,image/webp,image/avif" /></div>
               </div>
               <div class="field"><label for="productDescription">Description</label><textarea id="productDescription" maxlength="2000"></textarea></div>
+              <div class="field"><label for="productAttributes">Options / variants (JSON)</label><textarea id="productAttributes" placeholder='{"sizes":["S","M","L"],"colours":["Black","White"]}'></textarea></div>
               <div class="field-grid">
                 <div class="field"><label for="productBatch">Medicine batch number (if applicable)</label><input id="productBatch" maxlength="80" /></div>
                 <div class="field"><label for="productExpiry">Expiry date (if applicable)</label><input id="productExpiry" type="date" /></div>
@@ -218,6 +219,7 @@ function editProduct(p){
   document.querySelector("#productSku").value=p.sku;document.querySelector("#productName").value=p.name;
   document.querySelector("#productCategory").value=p.category;document.querySelector("#productPrice").value=p.price;
   document.querySelector("#productStock").value=p.stockQuantity;document.querySelector("#productDescription").value=p.description;
+  document.querySelector("#productAttributes").value=JSON.stringify(p.attributes||{},null,2);
   document.querySelector("#productBatch").value=p.batchNumber||"";document.querySelector("#productExpiry").value=p.expiryDate||"";
   document.querySelector("#productActive").checked=p.isActive;document.querySelector("#productPrescription").checked=p.requiresPrescription;
   document.querySelector("#productFormTitle").scrollIntoView({behavior:"smooth"});
@@ -233,6 +235,7 @@ document.querySelector("#productForm").addEventListener("submit",async e=>{
       sku:document.querySelector("#productSku").value,name:document.querySelector("#productName").value,
       category:document.querySelector("#productCategory").value,price:Number(document.querySelector("#productPrice").value),
       stockQuantity:Number(document.querySelector("#productStock").value),description:document.querySelector("#productDescription").value,
+      attributes:JSON.parse(document.querySelector("#productAttributes").value||"{}"),
       imageKey,isActive:document.querySelector("#productActive").checked,requiresPrescription:document.querySelector("#productPrescription").checked,
       batchNumber:document.querySelector("#productBatch").value||null,expiryDate:document.querySelector("#productExpiry").value||null
     };
