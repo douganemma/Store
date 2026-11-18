@@ -556,6 +556,12 @@ export default {
       if (url.pathname === "/api/admin/uploads" && request.method === "POST") return handleUploads(request, env);
       const categories = await handleCategories(request, env, url.pathname);
       if (categories) return categories;
+      const adminOrders = await handleAdminOrders(request, env, url.pathname);
+      if (adminOrders) return adminOrders;
+      const cart = await handleCart(request, env, url.pathname);
+      if (cart) return cart;
+      const checkout = await handleCheckout(request, env);
+      if (checkout) return checkout;
       const products = await handleProducts(request, env, url.pathname);
       if (products) return products;
       if (url.pathname === "/api/chat" && request.method === "POST") return handleChat(request, env);
